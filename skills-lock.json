@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "skills": {
+    "langchain4j-spring-boot-integration": {
+      "source": "giuseppe-trisciuoglio/developer-kit",
+      "sourceType": "github",
+      "computedHash": "78454de9b6412ed251a195399e05ee91c6ca3922ff87647ffca7e5d349e8db13"
+    },
+    "spring-ai-mcp-server-patterns": {
+      "source": "giuseppe-trisciuoglio/developer-kit",
+      "sourceType": "github",
+      "computedHash": "f4550b5fc98bb463667e950f6eff7bc03cbbf0999b9659072542d5abe72331a2"
+    },
+    "spring-boot-application": {
+      "source": "aj-geddes/useful-ai-prompts",
+      "sourceType": "github",
+      "computedHash": "d1e7599b5c2ed270c8b5350bdef818f0dfc071366d512b0d9766ae6c9db240a0"
+    },
+    "spring-boot-resilience4j": {
+      "source": "giuseppe-trisciuoglio/developer-kit",
+      "sourceType": "github",
+      "computedHash": "9269b89238b0f4be87aaf569db8a1dab80da136f2aed7824e5ee64f4e066908d"
+    }
+  }
+}
