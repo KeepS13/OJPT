@@ -1,0 +1,6 @@
+export { default as AdminLayout } from './AdminLayout.vue'
+export { default as OverviewTab } from './OverviewTab.vue'
+export { default as UserManagement } from './UserManagement.vue'
+export { default as RoleManagement } from './RoleManagement.vue'
+export { default as PermissionManagement } from './PermissionManagement.vue'
+export { default as SchoolManagement } from './SchoolManagement.vue'
