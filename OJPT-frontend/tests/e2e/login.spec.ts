@@ -23,3 +23,17 @@ test('用户可以通过顶部登录弹窗成功登录', async ({ page }) => {
   await expect(page.getByText('登录成功')).toBeVisible()
 })
 
+test('输入错误密码时应显示错误提示', async ({ page }) => {
+  await page.goto('/')
+
+  await page.getByTestId('nav-login-button').click()
+
+  await page.getByTestId('login-account-input').fill(TEST_EMAIL)
+  await page.getByTestId('login-password-input').fill('wrong-password')
+
+  await page.getByTestId('login-submit-button').click()
+
+  // 具体错误文案由后端与全局消息定义，这里只检查出现了“错误”关键字的提示文案
+  await expect(page.getByText(/错误|失败|密码/i)).toBeVisible()
+})
+
