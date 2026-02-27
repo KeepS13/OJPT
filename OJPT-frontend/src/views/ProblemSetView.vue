@@ -1,17 +1,26 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { RouterLink } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { getProblemList } from '@/api/problem'
+import type { PageResponse } from '@/api/base'
 
 type Difficulty = 'EASY' | 'MEDIUM' | 'HARD'
 type ProblemStatus = 'UNSOLVED' | 'ATTEMPTED' | 'SOLVED'
 
-interface ProblemListItem {
-  id: number
+interface ProblemTagVO {
+  id: string
+  name: string
+  type?: string | null
+}
+
+interface ProblemListItemVO {
+  id: string
   title: string
   difficulty: Difficulty
-  acceptanceRate: number
-  tags: string[]
-  status: ProblemStatus
+  acceptanceRate?: number | null
+  tags?: ProblemTagVO[] | null
+  status?: ProblemStatus | null
 }
 
 const difficulties: { label: string; value: Difficulty }[] = [
@@ -27,44 +36,12 @@ const statusOptions: { label: string; value: ProblemStatus | 'ALL' }[] = [
   { label: '已通过', value: 'SOLVED' },
 ]
 
-const mockProblems = ref<ProblemListItem[]>([
-  {
-    id: 1,
-    title: '两数之和',
-    difficulty: 'EASY',
-    acceptanceRate: 77.1,
-    tags: ['数组', '哈希表'],
-    status: 'SOLVED',
-  },
-  {
-    id: 2,
-    title: '两数相加',
-    difficulty: 'MEDIUM',
-    acceptanceRate: 55.1,
-    tags: ['链表', '数学'],
-    status: 'ATTEMPTED',
-  },
-  {
-    id: 3,
-    title: '无重复字符的最长子串',
-    difficulty: 'MEDIUM',
-    acceptanceRate: 46.5,
-    tags: ['字符串', '滑动窗口'],
-    status: 'UNSOLVED',
-  },
-  {
-    id: 4,
-    title: '寻找两个正序数组的中位数',
-    difficulty: 'HARD',
-    acceptanceRate: 42.0,
-    tags: ['数组', '二分查找'],
-    status: 'UNSOLVED',
-  },
-])
+const problems = ref<ProblemListItemVO[]>([])
+const loading = ref(false)
 
 const page = ref(1)
 const pageSize = ref(20)
-const total = ref(4224)
+const total = ref(0)
 
 const searchKeyword = ref('')
 const activeDifficulty = ref<Difficulty | 'ALL'>('ALL')
@@ -77,11 +54,52 @@ const getDifficultyClass = (difficulty: Difficulty) => {
   return 'difficulty-badge difficulty-badge--hard'
 }
 
-const getStatusDotClass = (status: ProblemStatus) => {
+const getStatusDotClass = (status?: ProblemStatus | null) => {
   if (status === 'SOLVED') return 'status-dot status-dot--solved'
   if (status === 'ATTEMPTED') return 'status-dot status-dot--attempted'
   return 'status-dot status-dot--unsolved'
 }
+
+const fetchProblems = async () => {
+  loading.value = true
+  try {
+    const params: Record<string, unknown> = {
+      page: page.value,
+      size: pageSize.value,
+    }
+    if (searchKeyword.value.trim()) {
+      params.keyword = searchKeyword.value.trim()
+    }
+    if (activeDifficulty.value !== 'ALL') {
+      params.difficulty = activeDifficulty.value
+    }
+    if (activeStatus.value !== 'ALL') {
+      params.status = activeStatus.value
+    }
+    if (orderBy.value !== 'DEFAULT') {
+      params.orderBy = orderBy.value
+    }
+
+    const res = await getProblemList(params)
+    const payload = res.data as PageResponse<ProblemListItemVO> | { data: PageResponse<ProblemListItemVO> }
+    const pageData =
+      (payload && 'records' in payload ? (payload as PageResponse<ProblemListItemVO>) : (payload as any).data) ??
+      null
+
+    problems.value = pageData?.records ?? []
+    total.value = pageData?.total ?? 0
+  } catch (e) {
+    ElMessage.error('加载题库失败，请稍后重试')
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(fetchProblems)
+
+watch([page, pageSize, searchKeyword, activeDifficulty, activeStatus, orderBy], () => {
+  fetchProblems()
+})
 </script>
 
 <template>
@@ -190,16 +208,22 @@ const getStatusDotClass = (status: ProblemStatus) => {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="p in mockProblems" :key="p.id" class="problem-row">
+          <tr v-if="loading">
+            <td colspan="6" class="loading-row">正在加载题库...</td>
+          </tr>
+          <tr v-else-if="!problems.length">
+            <td colspan="6" class="loading-row">暂无题目</td>
+          </tr>
+          <tr v-for="p in problems" :key="p.id" class="problem-row">
             <td class="col-status">
-              <span :class="getStatusDotClass(p.status)" />
+              <span :class="getStatusDotClass(p.status || null)" />
             </td>
             <td class="col-id">
-              {{ p.id.toString().padStart(4, '0') }}
+              {{ String(p.id).padStart(4, '0') }}
             </td>
             <td class="col-title">
               <div class="title-main">
-                <RouterLink :to="`/problems/${p.id}`" class="problem-link">
+                <RouterLink :to="`/problems/${String(p.id)}`" class="problem-link">
                   {{ p.title }}
                 </RouterLink>
               </div>
@@ -216,11 +240,19 @@ const getStatusDotClass = (status: ProblemStatus) => {
               </span>
             </td>
             <td class="col-acceptance">
-              {{ p.acceptanceRate.toFixed(1) }}%
+              {{
+                p.acceptanceRate != null
+                  ? `${Number(p.acceptanceRate).toFixed(1)}%`
+                  : '--'
+              }}
             </td>
             <td class="col-tags">
-              <span v-for="tag in p.tags" :key="tag" class="tag-pill">
-                {{ tag }}
+              <span
+                v-for="tag in p.tags || []"
+                :key="tag.id"
+                class="tag-pill"
+              >
+                {{ tag.name }}
               </span>
             </td>
           </tr>
@@ -579,6 +611,13 @@ const getStatusDotClass = (status: ProblemStatus) => {
 .pagination-info {
   font-size: 12px;
   color: #6b7280;
+}
+
+.loading-row {
+  text-align: center;
+  padding: 16px;
+  color: #6b7280;
+  font-size: 13px;
 }
 
 @media (max-width: 960px) {

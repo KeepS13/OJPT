@@ -4,21 +4,30 @@ import com.example.ojpt.common.PageResult;
 import com.example.ojpt.common.Result;
 import com.example.ojpt.dto.PermissionCreateDTO;
 import com.example.ojpt.dto.PermissionUpdateDTO;
+import com.example.ojpt.dto.ProblemUpdateDTO;
 import com.example.ojpt.dto.RoleCreateDTO;
 import com.example.ojpt.dto.RolePermissionAssignDTO;
 import com.example.ojpt.dto.RoleUpdateDTO;
 import com.example.ojpt.dto.SchoolCreateDTO;
 import com.example.ojpt.dto.SchoolUpdateDTO;
+import com.example.ojpt.dto.SubmissionStatusUpdateDTO;
+import com.example.ojpt.dto.TagCreateDTO;
+import com.example.ojpt.dto.TagUpdateDTO;
 import com.example.ojpt.dto.UserRoleUpdateDTO;
 import com.example.ojpt.dto.UserUpdateDTO;
 import com.example.ojpt.exception.BusinessException;
 import com.example.ojpt.security.LoginUserDetails;
 import com.example.ojpt.service.AdminService;
 import com.example.ojpt.service.UserService;
+import com.example.ojpt.service.ProblemService;
+import com.example.ojpt.service.TagService;
+import com.example.ojpt.service.SubmissionService;
 import com.example.ojpt.vo.PermissionVO;
+import com.example.ojpt.vo.ProblemSimpleVO;
 import com.example.ojpt.vo.RoleVO;
 import com.example.ojpt.vo.SchoolVO;
 import com.example.ojpt.vo.StatisticsVO;
+import com.example.ojpt.vo.TagVO;
 import com.example.ojpt.vo.UserDetailVO;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -48,6 +57,9 @@ public class AdminController {
     
     private final AdminService adminService;
     private final UserService userService;
+    private final ProblemService problemService;
+    private final TagService tagService;
+    private final SubmissionService submissionService;
     
     // 用户管理扩展
     @GetMapping("/users")
@@ -267,6 +279,99 @@ public class AdminController {
             throw BusinessException.badRequest("status 值必须在 0-2 之间（0禁用/1启用/2待认证）");
         }
         adminService.updateSchoolStatus(schoolId, status);
+        return Result.ok("状态更新成功");
+    }
+
+    // 题库管理（仅 ADMIN）
+
+    @GetMapping("/problems/{problemId}")
+    @Operation(summary = "获取题目详情（管理端）", description = "根据题目ID获取题目基础信息")
+    public Result<ProblemSimpleVO> getProblem(@PathVariable Long problemId) {
+        ProblemSimpleVO vo = problemService.getProblem(problemId);
+        return Result.ok(vo);
+    }
+
+    @PutMapping("/problems/{problemId}")
+    @Operation(summary = "更新题目（管理端）", description = "管理员更新题目信息")
+    public Result<Void> updateProblem(
+            @PathVariable Long problemId,
+            @Valid @RequestBody ProblemUpdateDTO dto) {
+        problemService.updateProblem(problemId, dto);
+        return Result.ok("更新成功");
+    }
+
+    @PostMapping("/problems/{problemId}:publish")
+    @Operation(summary = "发布题目", description = "管理员审核并发布题目到正式题库")
+    public Result<Void> publishProblem(@PathVariable Long problemId) {
+        Long adminUserId = getCurrentUserId();
+        problemService.publishProblem(problemId, adminUserId);
+        return Result.ok("发布成功");
+    }
+
+    @PostMapping("/problems/{problemId}:archive")
+    @Operation(summary = "归档题目", description = "管理员将题目下架/归档")
+    public Result<Void> archiveProblem(@PathVariable Long problemId) {
+        Long adminUserId = getCurrentUserId();
+        problemService.archiveProblem(problemId, adminUserId);
+        return Result.ok("归档成功");
+    }
+
+    // 标签管理
+
+    @GetMapping("/tags")
+    @Operation(summary = "获取标签列表", description = "获取所有题目标签")
+    public Result<java.util.List<TagVO>> getTags() {
+        java.util.List<TagVO> tags = tagService.listAll();
+        return Result.ok(tags);
+    }
+
+    @PostMapping("/tags")
+    @Operation(summary = "创建标签", description = "创建新的题目标签")
+    public Result<TagVO> createTag(@Valid @RequestBody TagCreateDTO dto) {
+        TagVO vo = tagService.createTag(dto);
+        return Result.ok("创建成功", vo);
+    }
+
+    @PutMapping("/tags/{tagId}")
+    @Operation(summary = "更新标签", description = "更新题目标签信息")
+    public Result<Void> updateTag(
+            @PathVariable Long tagId,
+            @Valid @RequestBody TagUpdateDTO dto) {
+        tagService.updateTag(tagId, dto);
+        return Result.ok("更新成功");
+    }
+
+    @DeleteMapping("/tags/{tagId}")
+    @Operation(summary = "删除标签", description = "删除题目标签（会同时移除关联）")
+    public Result<Void> deleteTag(@PathVariable Long tagId) {
+        tagService.deleteTag(tagId);
+        return Result.ok("删除成功");
+    }
+
+    @PostMapping("/problems/{problemId}/tags")
+    @Operation(summary = "为题目绑定标签", description = "为指定题目绑定标签")
+    public Result<Void> addTagToProblem(
+            @PathVariable Long problemId,
+            @RequestParam("tagId") Long tagId) {
+        tagService.addTagToProblem(problemId, tagId);
+        return Result.ok("绑定成功");
+    }
+
+    @DeleteMapping("/problems/{problemId}/tags")
+    @Operation(summary = "移除题目标签", description = "从题目中移除指定标签")
+    public Result<Void> removeTagFromProblem(
+            @PathVariable Long problemId,
+            @RequestParam("tagId") Long tagId) {
+        tagService.removeTagFromProblem(problemId, tagId);
+        return Result.ok("移除成功");
+    }
+    
+    @PostMapping("/submissions/{submissionId}:setStatus")
+    @Operation(summary = "修改提交状态", description = "管理员手动修改提交状态（用于 stub 阶段模拟判题结果）")
+    public Result<Void> updateSubmissionStatus(
+            @PathVariable Long submissionId,
+            @Valid @RequestBody SubmissionStatusUpdateDTO dto) {
+        submissionService.updateSubmissionStatus(submissionId, dto);
         return Result.ok("状态更新成功");
     }
     

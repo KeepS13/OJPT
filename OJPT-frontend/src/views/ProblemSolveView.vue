@@ -1,15 +1,45 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import LoginDialog from '@/components/auth/LoginDialog.vue'
 import UserAvatar from '@/components/common/UserAvatar.vue'
 import ProblemTimer from '@/components/problem/ProblemTimer.vue'
 import { useAuth } from '@/hooks/useAuth'
+import { getProblemDetail } from '@/api/problem'
+import { createSubmission } from '@/api/submission'
 
 const route = useRoute()
 const router = useRouter()
 
 const problemId = route.params.id ?? '1'
+
+type Difficulty = 'EASY' | 'MEDIUM' | 'HARD'
+type ProblemStatus = 'UNSOLVED' | 'ATTEMPTED' | 'SOLVED'
+
+interface ProblemTagVO {
+  id: string
+  name: string
+  type?: string | null
+}
+
+interface ProblemDetailVO {
+  id: string
+  title: string
+  difficulty: Difficulty
+  statementMd?: string | null
+  submitCount?: number | null
+  acceptedCount?: number | null
+  acceptanceRate?: number | null
+  tags?: ProblemTagVO[] | null
+  status?: ProblemStatus | null
+  timeLimitMs?: number | null
+  memoryLimitKb?: number | null
+}
+
+const problemDetail = ref<ProblemDetailVO | null>(null)
+const loadingProblem = ref(false)
+const submitting = ref(false)
 
 const languages = ['C++', 'Java', 'Python3', 'C', 'Go', 'JavaScript']
 const activeLanguage = ref('C++')
@@ -59,6 +89,20 @@ const resetCodeToDefault = () => {
 const runCodeWithTestCases = () => {
   // TODO: 接入后端/沙箱执行。这里先做交互占位，避免按钮无响应。
   console.log('run: 调用测试用例运行（占位）')
+}
+
+const loadProblemDetail = async () => {
+  loadingProblem.value = true
+  try {
+    const res = await getProblemDetail(String(problemId))
+    const body: any = res.data
+    const data = body && typeof body === 'object' && 'data' in body ? body.data : body
+    problemDetail.value = data as ProblemDetailVO
+  } catch (e) {
+    ElMessage.error('加载题目详情失败，请稍后重试')
+  } finally {
+    loadingProblem.value = false
+  }
 }
 
 // 测试用例数据结构与状态
@@ -341,6 +385,7 @@ const onWindowResize = () => {
 }
 
 onMounted(async () => {
+  await loadProblemDetail()
   await applyInitialWidth()
   await applyInitialEditorHeight()
   window.addEventListener('resize', onWindowResize)
@@ -441,6 +486,37 @@ const handleLogout = () => {
   showMenu.value = false
   router.push('/')
 }
+
+const handleSubmit = async () => {
+  if (!isAuthed.value) {
+    openLogin()
+    return
+  }
+
+  const pid = problemDetail.value?.id ?? String(problemId)
+  if (!pid) return
+
+  submitting.value = true
+  try {
+    const res = await createSubmission({
+      problemId: pid,
+      language: activeLanguage.value,
+      sourceCode: code.value,
+    })
+    const body: any = res.data
+    const data = body && typeof body === 'object' && 'data' in body ? body.data : body
+    const status = data?.status
+    if (status === 'QUEUED') {
+      ElMessage.success('提交成功，已加入评测队列（占位）')
+    } else {
+      ElMessage.success('提交成功')
+    }
+  } catch (e) {
+    ElMessage.error('提交失败，请稍后重试')
+  } finally {
+    submitting.value = false
+  }
+}
 </script>
 
 <template>
@@ -453,10 +529,27 @@ const handleLogout = () => {
         <div class="title-row">
           <div class="title-main">
             <h1 class="problem-title">
-              {{ problemId }}. 两数之和
+              {{ problemId }}. {{ problemDetail?.title || '两数之和' }}
             </h1>
-            <span class="badge badge--solved">已解答</span>
-            <span class="difficulty-badge difficulty-badge--easy">简单</span>
+            <span v-if="problemDetail?.status === 'SOLVED'" class="badge badge--solved">
+              已解答
+            </span>
+            <span
+              class="difficulty-badge"
+              :class="{
+                'difficulty-badge--easy': problemDetail?.difficulty === 'EASY' || !problemDetail,
+                'difficulty-badge--medium': problemDetail?.difficulty === 'MEDIUM',
+                'difficulty-badge--hard': problemDetail?.difficulty === 'HARD',
+              }"
+            >
+              {{
+                problemDetail?.difficulty === 'MEDIUM'
+                  ? '中等'
+                  : problemDetail?.difficulty === 'HARD'
+                    ? '困难'
+                    : '简单'
+              }}
+            </span>
           </div>
           <div class="solve-user-area">
             <ProblemTimer />
@@ -541,56 +634,91 @@ const handleLogout = () => {
         <div class="statement-scroll">
           <h2 class="section-title">题目描述</h2>
           <div class="meta-row">
-            <span class="meta-item">通过率 77.1%</span>
+            <span class="meta-item">
+              通过率
+              {{
+                problemDetail && problemDetail.acceptanceRate != null
+                  ? ` ${Number(problemDetail.acceptanceRate).toFixed(1)}%`
+                  : ' --'
+              }}
+            </span>
             <span class="meta-dot" />
-            <span class="meta-item">20.6K 次提交</span>
+            <span class="meta-item">
+              {{
+                problemDetail && problemDetail.submitCount != null
+                  ? `${problemDetail.submitCount} 次提交`
+                  : ' -- 次提交'
+              }}
+            </span>
           </div>
-          <div class="tag-row">
+          <div v-if="problemDetail?.tags?.length" class="tag-row">
+            <span
+              v-for="tag in problemDetail.tags"
+              :key="tag.id"
+              class="tag-pill"
+            >
+              {{ tag.name }}
+            </span>
+          </div>
+          <div v-else class="tag-row">
             <span class="tag-pill">数组</span>
             <span class="tag-pill">哈希表</span>
           </div>
-          <p class="paragraph">
-            给定一个整数数组
-            <code>nums</code>
-            和一个整数目标值
-            <code>target</code>
-            ，请你在该数组中找出和为目标值
-            <code>target</code>
-            的那&nbsp;<strong>两个</strong>&nbsp;整数，并返回它们的数组下标。
-          </p>
-          <p class="paragraph">
-            你可以假设每种输入只会对应一个答案。但是，数组中同一个元素在答案里不能重复出现。
-          </p>
-          <p class="paragraph">
-            你可以按任意顺序返回答案。
-          </p>
 
-          <h3 class="sub-section-title">示例 1：</h3>
-          <pre class="code-block">
+          <div v-if="loadingProblem" class="statement-loading">
+            正在加载题目详情...
+          </div>
+          <template v-else>
+            <div v-if="problemDetail?.statementMd" class="markdown-body">
+              <pre class="code-block">
+{{ problemDetail.statementMd }}</pre
+              >
+            </div>
+            <template v-else>
+              <p class="paragraph">
+                给定一个整数数组
+                <code>nums</code>
+                和一个整数目标值
+                <code>target</code>
+                ，请你在该数组中找出和为目标值
+                <code>target</code>
+                的那&nbsp;<strong>两个</strong>&nbsp;整数，并返回它们的数组下标。
+              </p>
+              <p class="paragraph">
+                你可以假设每种输入只会对应一个答案。但是，数组中同一个元素在答案里不能重复出现。
+              </p>
+              <p class="paragraph">
+                你可以按任意顺序返回答案。
+              </p>
+
+              <h3 class="sub-section-title">示例 1：</h3>
+              <pre class="code-block">
 输入：nums = [2,7,11,15], target = 9
 输出：[0,1]
 解释：因为 nums[0] + nums[1] == 9 ，返回 [0, 1]。</pre
-          >
+              >
 
-          <h3 class="sub-section-title">示例 2：</h3>
-          <pre class="code-block">
+              <h3 class="sub-section-title">示例 2：</h3>
+              <pre class="code-block">
 输入：nums = [3,2,4], target = 6
 输出：[1,2]</pre
-          >
+              >
 
-          <h3 class="sub-section-title">示例 3：</h3>
-          <pre class="code-block">
+              <h3 class="sub-section-title">示例 3：</h3>
+              <pre class="code-block">
 输入：nums = [3,3], target = 6
 输出：[0,1]</pre
-          >
+              >
 
-          <h3 class="sub-section-title">提示：</h3>
-          <ul class="hint-list">
-            <li>2 &lt;= nums.length &lt;= 10<sup>4</sup></li>
-            <li>-10<sup>9</sup> &lt;= nums[i] &lt;= 10<sup>9</sup></li>
-            <li>-10<sup>9</sup> &lt;= target &lt;= 10<sup>9</sup></li>
-            <li>只会存在一个有效答案</li>
-          </ul>
+              <h3 class="sub-section-title">提示：</h3>
+              <ul class="hint-list">
+                <li>2 &lt;= nums.length &lt;= 10<sup>4</sup></li>
+                <li>-10<sup>9</sup> &lt;= nums[i] &lt;= 10<sup>9</sup></li>
+                <li>-10<sup>9</sup> &lt;= target &lt;= 10<sup>9</sup></li>
+                <li>只会存在一个有效答案</li>
+              </ul>
+            </template>
+          </template>
         </div>
       </section>
 
@@ -639,8 +767,13 @@ const handleLogout = () => {
                   <div v-if="iconHint === 'reset'" class="icon-hint-panel">还原到默认的代码模版</div>
                 </transition>
               </div>
-              <button type="button" class="btn-primary">
-                提交
+              <button
+                type="button"
+                class="btn-primary"
+                :disabled="submitting"
+                @click="handleSubmit"
+              >
+                {{ submitting ? '提交中...' : '提交' }}
               </button>
             </div>
           </header>
