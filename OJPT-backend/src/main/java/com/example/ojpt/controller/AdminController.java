@@ -411,7 +411,6 @@ public class AdminController {
         return Result.ok(vo);
     }
     
-    @SuppressWarnings("unused") // 保留以备后续控制器内部复用
     private Long getCurrentUserId() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !authentication.isAuthenticated()
