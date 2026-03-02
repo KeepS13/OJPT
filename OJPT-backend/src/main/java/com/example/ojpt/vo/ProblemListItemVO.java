@@ -12,6 +12,11 @@ public class ProblemListItemVO {
 
     private Long id;
 
+    /**
+     * 题目展示编号（4位格式，如 P0001）
+     */
+    private Integer problemNo;
+
     private String title;
 
     private String difficulty;

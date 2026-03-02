@@ -23,6 +23,11 @@ public class Problem {
     private Long id;
 
     /**
+     * 题目展示编号（稳定的短号，从1开始自增）
+     */
+    private Integer problemNo;
+
+    /**
      * 题目标题
      */
     private String title;

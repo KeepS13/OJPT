@@ -16,6 +16,7 @@ interface ProblemTagVO {
 
 interface ProblemListItemVO {
   id: string
+  problemNo: number
   title: string
   difficulty: Difficulty
   acceptanceRate?: number | null
@@ -219,7 +220,7 @@ watch([page, pageSize, searchKeyword, activeDifficulty, activeStatus, orderBy], 
               <span :class="getStatusDotClass(p.status || null)" />
             </td>
             <td class="col-id">
-              {{ String(p.id).padStart(4, '0') }}
+              {{ 'P' + String(p.problemNo).padStart(4, '0') }}
             </td>
             <td class="col-title">
               <div class="title-main">

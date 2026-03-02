@@ -171,15 +171,15 @@ public class ProblemServiceImpl implements ProblemService {
 
         // 排序
         if ("ID".equalsIgnoreCase(orderBy)) {
-            wrapper.orderByAsc(Problem::getId);
+            wrapper.orderByAsc(Problem::getProblemNo);
         } else if ("DIFFICULTY".equalsIgnoreCase(orderBy)) {
-            wrapper.orderByAsc(Problem::getDifficulty).orderByAsc(Problem::getId);
+            wrapper.orderByAsc(Problem::getDifficulty).orderByAsc(Problem::getProblemNo);
         } else if ("ACCEPTANCE".equalsIgnoreCase(orderBy)) {
             // 通过率 = accepted / submit，简单按 acceptedCount 降序
             wrapper.orderByDesc(Problem::getAcceptedCount);
         } else {
-            // 默认按创建时间倒序
-            wrapper.orderByDesc(Problem::getCreatedAt);
+            // 默认按题号升序
+            wrapper.orderByAsc(Problem::getProblemNo);
         }
 
         Page<Problem> result = problemMapper.selectPage(pageParam, wrapper);
@@ -245,6 +245,7 @@ public class ProblemServiceImpl implements ProblemService {
                 .map(p2 -> {
                     ProblemListItemVO vo = new ProblemListItemVO();
                     vo.setId(p2.getId());
+                    vo.setProblemNo(p2.getProblemNo());
                     vo.setTitle(p2.getTitle());
                     vo.setDifficulty(p2.getDifficulty());
                     vo.setStatus(statusMap.get(p2.getId()));
@@ -317,6 +318,7 @@ public class ProblemServiceImpl implements ProblemService {
 
         ProblemDetailVO vo = new ProblemDetailVO();
         vo.setId(problem.getId());
+        vo.setProblemNo(problem.getProblemNo());
         vo.setTitle(problem.getTitle());
         vo.setDifficulty(problem.getDifficulty());
         vo.setStatus(progressStatus);
@@ -339,6 +341,7 @@ public class ProblemServiceImpl implements ProblemService {
     private ProblemSimpleVO toSimpleVO(Problem problem) {
         ProblemSimpleVO vo = new ProblemSimpleVO();
         vo.setId(problem.getId());
+        vo.setProblemNo(problem.getProblemNo());
         vo.setTitle(problem.getTitle());
         vo.setDifficulty(problem.getDifficulty());
         vo.setStatus(problem.getStatus());

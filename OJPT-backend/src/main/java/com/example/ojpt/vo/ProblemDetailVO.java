@@ -13,6 +13,11 @@ public class ProblemDetailVO {
 
     private Long id;
 
+    /**
+     * 题目展示编号
+     */
+    private Integer problemNo;
+
     private String title;
 
     private String difficulty;

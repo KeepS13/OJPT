@@ -8,6 +8,7 @@ import ProblemTimer from '@/components/problem/ProblemTimer.vue'
 import { useAuth } from '@/hooks/useAuth'
 import { getProblemDetail } from '@/api/problem'
 import { createSubmission } from '@/api/submission'
+import { renderMarkdown } from '@/utils/markdown'
 
 const route = useRoute()
 const router = useRouter()
@@ -25,6 +26,7 @@ interface ProblemTagVO {
 
 interface ProblemDetailVO {
   id: string
+  problemNo: number
   title: string
   difficulty: Difficulty
   statementMd?: string | null
@@ -40,6 +42,10 @@ interface ProblemDetailVO {
 const problemDetail = ref<ProblemDetailVO | null>(null)
 const loadingProblem = ref(false)
 const submitting = ref(false)
+
+const statementHtml = computed(() =>
+  problemDetail.value?.statementMd ? renderMarkdown(problemDetail.value.statementMd) : '',
+)
 
 const languages = ['C++', 'Java', 'Python3', 'C', 'Go', 'JavaScript']
 const activeLanguage = ref('C++')
@@ -267,6 +273,7 @@ const storageKey = computed(() => `OJPT.solve.leftSplitRatio`)
 const editorSplitterHeight = 8
 const splitRatio = ref(0.6) // 上方代码区域所占比例
 const editorStorageKey = computed(() => `OJPT.solve.editorSplitRatio`)
+const editorPanelHeight = ref(0) // 右侧面板当前高度，用于按比例计算上下区域
 
 const applyInitialWidth = async () => {
   await nextTick()
@@ -287,7 +294,16 @@ const applyInitialWidth = async () => {
   }
 }
 
-const getEditorPanelHeight = () => editorPanelRef.value?.getBoundingClientRect().height ?? 0
+const getEditorPanelHeight = () => editorPanelHeight.value
+
+const refreshEditorPanelHeight = () => {
+  if (!editorPanelRef.value) {
+    editorPanelHeight.value = 0
+    return
+  }
+  const rect = editorPanelRef.value.getBoundingClientRect()
+  editorPanelHeight.value = rect.height
+}
 
 const applyInitialEditorHeight = async () => {
   await nextTick()
@@ -381,13 +397,25 @@ const onInnerSplitterPointerDown = (e: PointerEvent) => {
 }
 
 const onWindowResize = () => {
-  // keep_ratio：左右由 leftSplitRatio 控制，这里无需修正
+  // 左右面板按 ratio 控制宽度，不在此修改；这里只是同步右侧可用高度
+  refreshEditorPanelHeight()
 }
+
+let editorResizeObserver: ResizeObserver | null = null
 
 onMounted(async () => {
   await loadProblemDetail()
   await applyInitialWidth()
   await applyInitialEditorHeight()
+  refreshEditorPanelHeight()
+
+  if (window.ResizeObserver && editorPanelRef.value) {
+    editorResizeObserver = new ResizeObserver(() => {
+      refreshEditorPanelHeight()
+    })
+    editorResizeObserver.observe(editorPanelRef.value)
+  }
+
   window.addEventListener('resize', onWindowResize)
 })
 
@@ -395,6 +423,11 @@ onBeforeUnmount(() => {
   stopResizing()
   stopEditorResizing()
   window.removeEventListener('resize', onWindowResize)
+  if (editorResizeObserver && editorPanelRef.value) {
+    editorResizeObserver.unobserve(editorPanelRef.value)
+    editorResizeObserver.disconnect()
+    editorResizeObserver = null
+  }
   if (iconHintHideTimeout !== null) {
     window.clearTimeout(iconHintHideTimeout)
     iconHintHideTimeout = null
@@ -529,7 +562,7 @@ const handleSubmit = async () => {
         <div class="title-row">
           <div class="title-main">
             <h1 class="problem-title">
-              {{ problemId }}. {{ problemDetail?.title || '两数之和' }}
+              {{ problemDetail?.problemNo ? 'P' + String(problemDetail.problemNo).padStart(4, '0') + '. ' : '' }}{{ problemDetail?.title || '两数之和' }}
             </h1>
             <span v-if="problemDetail?.status === 'SOLVED'" class="badge badge--solved">
               已解答
@@ -669,11 +702,7 @@ const handleSubmit = async () => {
             正在加载题目详情...
           </div>
           <template v-else>
-            <div v-if="problemDetail?.statementMd" class="markdown-body">
-              <pre class="code-block">
-{{ problemDetail.statementMd }}</pre
-              >
-            </div>
+            <div v-if="problemDetail?.statementMd" class="markdown-body" v-html="statementHtml" />
             <template v-else>
               <p class="paragraph">
                 给定一个整数数组
@@ -1271,6 +1300,66 @@ code {
   padding-left: 18px;
   font-size: 13px;
   color: #4b5563;
+}
+
+.markdown-body {
+  font-size: 13px;
+  color: #374151;
+  line-height: 1.7;
+}
+
+:deep(.markdown-body > h1:first-child) {
+  display: none;
+}
+
+:deep(.markdown-body h1),
+:deep(.markdown-body h2),
+:deep(.markdown-body h3),
+:deep(.markdown-body h4) {
+  font-weight: 600;
+  margin: 12px 0 8px;
+}
+
+:deep(.markdown-body p) {
+  margin: 0 0 8px 0;
+}
+
+:deep(.markdown-body ul),
+:deep(.markdown-body ol) {
+  padding-left: 20px;
+  margin: 0 0 8px 0;
+}
+
+:deep(.markdown-body li) {
+  margin: 2px 0;
+}
+
+:deep(.markdown-body > ul) {
+  list-style: none;
+  padding: 8px 14px;
+  margin: 10px 0 14px;
+  border-left: 4px solid #d4d4d8;
+  background-color: #f9fafb;
+  border-radius: 4px;
+}
+
+:deep(.markdown-body code) {
+  background-color: #f3f4f6;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+:deep(.markdown-body pre) {
+  font-family: SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 12px;
+  background-color: #f9fafb;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+  white-space: pre-wrap;
+  margin: 0 0 8px 0;
+  overflow-x: auto;
 }
 
 .editor-header {

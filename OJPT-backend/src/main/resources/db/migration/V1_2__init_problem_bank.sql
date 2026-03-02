@@ -1,8 +1,9 @@
 -- 题库与提交域初始化 - 表结构与基础演示数据
 
--- 题目主表
+-- 题目主表（包含 problem_no 稳定展示题号）
 CREATE TABLE IF NOT EXISTS `problem` (
     `id`              BIGINT UNSIGNED NOT NULL COMMENT '主键，雪花 ID',
+    `problem_no`      INT UNSIGNED     NOT NULL AUTO_INCREMENT COMMENT '题目展示编号（稳定递增，从1开始）',
     `title`           VARCHAR(255)    NOT NULL COMMENT '题目标题',
     `difficulty`      ENUM('EASY','MEDIUM','HARD') NOT NULL DEFAULT 'EASY' COMMENT '难度',
     `statement_md`    LONGTEXT        NOT NULL COMMENT '题面 Markdown 内容',
@@ -17,6 +18,7 @@ CREATE TABLE IF NOT EXISTS `problem` (
     `created_by`      BIGINT UNSIGNED          DEFAULT NULL COMMENT '创建人',
     `updated_by`      BIGINT UNSIGNED          DEFAULT NULL COMMENT '更新人',
     PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_problem_no` (`problem_no`),
     KEY `idx_problem_status_difficulty` (`status`,`difficulty`),
     KEY `idx_problem_title` (`title`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='题目主表';
@@ -88,16 +90,17 @@ ON DUPLICATE KEY UPDATE
 
 -- 基础演示数据：题目（示例：两数之和 等）
 INSERT INTO `problem` (
-    `id`, `title`, `difficulty`, `statement_md`,
+    `id`, `problem_no`, `title`, `difficulty`, `statement_md`,
     `time_limit_ms`, `memory_limit_kb`, `status`,
     `submit_count`, `accepted_count`,
     `is_deleted`, `created_at`, `updated_at`, `created_by`, `updated_by`
 ) VALUES
     (
         2100000000000000001,
+        1,
         '两数之和',
         'EASY',
-        '# 两数之和\n\n给定一个整数数组 `nums` 和一个整数目标值 `target`，请你在该数组中找出 **和为目标值** `target` 的那 **两个** 整数，并返回它们的数组下标。\n\n你可以假设每种输入只会对应一个答案。但是，数组中同一个元素在答案里不能重复出现。\n\n你可以按任意顺序返回答案。\n\n**示例：**\n\n- 输入：`nums = [2,7,11,15]`, `target = 9`\n- 输出：`[0,1]`\n\n**提示：**\n\n- `2 <= nums.length <= 10^4`\n- `-10^9 <= nums[i] <= 10^9`\n- `-10^9 <= target <= 10^9`\n- 只会存在一个有效答案\n',
+        '给定一个整数数组 `nums` 和一个整数目标值 `target`，请你在该数组中找出 **和为目标值** `target` 的那 **两个** 整数，并返回它们的数组下标。\n\n你可以假设每种输入只会对应一个答案。但是，数组中同一个元素在答案里不能重复出现。\n\n你可以按任意顺序返回答案。\n\n**示例：**\n\n- 输入：`nums = [2,7,11,15]`, `target = 9`\n- 输出：`[0,1]`\n\n**提示：**\n\n- `2 <= nums.length <= 10^4`\n- `-10^9 <= nums[i] <= 10^9`\n- `-10^9 <= target <= 10^9`\n- 只会存在一个有效答案\n',
         1000,
         256000,
         'PUBLISHED',
@@ -111,9 +114,10 @@ INSERT INTO `problem` (
     ),
     (
         2100000000000000002,
+        2,
         '两数相加',
         'MEDIUM',
-        '# 两数相加\n\n给你两个 **非空** 的链表，表示两个非负的整数。它们每位数字都是按照 **逆序** 方式存储的，并且每个节点只能存储 **一位** 数字。\n\n请你将两个数相加，并以相同形式返回一个表示和的链表。\n\n你可以假设除了数字 0 之外，这两个数都不会以 0 开头。\n',
+        '给你两个 **非空** 的链表，表示两个非负的整数。它们每位数字都是按照 **逆序** 方式存储的，并且每个节点只能存储 **一位** 数字。\n\n请你将两个数相加，并以相同形式返回一个表示和的链表。\n\n你可以假设除了数字 0 之外，这两个数都不会以 0 开头。\n',
         2000,
         256000,
         'PUBLISHED',
