@@ -338,6 +338,26 @@ public class ProblemServiceImpl implements ProblemService {
         return vo;
     }
 
+    @Override
+    public ProblemDetailVO getProblemDetailByNo(Integer problemNo, Long userId) {
+        if (problemNo == null || problemNo <= 0) {
+            throw BusinessException.badRequest("题号不合法");
+        }
+
+        Problem problem = problemMapper.selectOne(
+                new LambdaQueryWrapper<Problem>()
+                        .eq(Problem::getProblemNo, problemNo)
+                        .eq(Problem::getIsDeleted, 0)
+                        .eq(Problem::getStatus, STATUS_PUBLISHED)
+        );
+        if (problem == null) {
+            throw BusinessException.notFound("题目");
+        }
+
+        // 复用原详情逻辑：需要按 ID 查询标签与进度
+        return getProblemDetail(problem.getId(), userId);
+    }
+
     private ProblemSimpleVO toSimpleVO(Problem problem) {
         ProblemSimpleVO vo = new ProblemSimpleVO();
         vo.setId(problem.getId());

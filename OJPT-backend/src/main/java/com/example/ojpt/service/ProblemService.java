@@ -61,5 +61,12 @@ public interface ProblemService {
      * 学员端获取题目详情（支持匿名访问，status 依赖登录用户）。
      */
     ProblemDetailVO getProblemDetail(Long problemId, Long userId);
+
+    /**
+     * 学员端通过题号获取题目详情（支持匿名访问）。
+     * <p>
+     * 注意：题号用于前端路由展示，不暴露雪花 ID。该接口仅返回已发布题目。
+     */
+    ProblemDetailVO getProblemDetailByNo(Integer problemNo, Long userId);
 }
 

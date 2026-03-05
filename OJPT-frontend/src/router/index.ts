@@ -35,7 +35,7 @@ const router = createRouter({
       component: ProblemSetView,
     },
     {
-      path: '/problems/:id',
+      path: '/problems/:problemNo',
       name: 'problem-solve',
       component: ProblemSolveView,
       meta: { hideTopNav: true },

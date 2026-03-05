@@ -224,7 +224,7 @@ watch([page, pageSize, searchKeyword, activeDifficulty, activeStatus, orderBy], 
             </td>
             <td class="col-title">
               <div class="title-main">
-                <RouterLink :to="`/problems/${String(p.id)}`" class="problem-link">
+                <RouterLink :to="`/problems/${String(p.problemNo)}`" class="problem-link">
                   {{ p.title }}
                 </RouterLink>
               </div>

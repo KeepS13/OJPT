@@ -6,14 +6,14 @@ import LoginDialog from '@/components/auth/LoginDialog.vue'
 import UserAvatar from '@/components/common/UserAvatar.vue'
 import ProblemTimer from '@/components/problem/ProblemTimer.vue'
 import { useAuth } from '@/hooks/useAuth'
-import { getProblemDetail } from '@/api/problem'
+import { getProblemDetailByNo } from '@/api/problem'
 import { createSubmission } from '@/api/submission'
 import { renderMarkdown } from '@/utils/markdown'
 
 const route = useRoute()
 const router = useRouter()
 
-const problemId = route.params.id ?? '1'
+const routeProblemNo = computed(() => route.params.problemNo)
 
 type Difficulty = 'EASY' | 'MEDIUM' | 'HARD'
 type ProblemStatus = 'UNSOLVED' | 'ATTEMPTED' | 'SOLVED'
@@ -100,7 +100,7 @@ const runCodeWithTestCases = () => {
 const loadProblemDetail = async () => {
   loadingProblem.value = true
   try {
-    const res = await getProblemDetail(String(problemId))
+    const res = await getProblemDetailByNo(String(routeProblemNo.value))
     const body: any = res.data
     const data = body && typeof body === 'object' && 'data' in body ? body.data : body
     problemDetail.value = data as ProblemDetailVO

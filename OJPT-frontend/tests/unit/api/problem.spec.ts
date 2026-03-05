@@ -11,7 +11,7 @@ vi.mock('@/api/request', () => ({
   },
 }))
 
-import { getProblemList, getProblemDetail } from '../../../src/api/problem'
+import { getProblemList, getProblemDetail, getProblemDetailByNo } from '../../../src/api/problem'
 
 describe('problem api', () => {
   beforeEach(() => {
@@ -36,6 +36,16 @@ describe('problem api', () => {
 
     expect(getMock).toHaveBeenCalledTimes(1)
     expect(getMock).toHaveBeenCalledWith(`/problems/${id}`)
+  })
+
+  it('getProblemDetailByNo 应该向 /problems/no/{problemNo} 发送 GET 请求', async () => {
+    const problemNo = 1
+    getMock.mockResolvedValue({ data: {} })
+
+    await getProblemDetailByNo(problemNo)
+
+    expect(getMock).toHaveBeenCalledTimes(1)
+    expect(getMock).toHaveBeenCalledWith(`/problems/no/${problemNo}`)
   })
 
   describe('problemNo 字段验证', () => {
@@ -91,7 +101,7 @@ describe('problem api', () => {
       }
       getMock.mockResolvedValue(mockResponse)
 
-      const res = await getProblemDetail('2100000000000000001')
+      const res = await getProblemDetailByNo(1)
 
       expect(res.data).toHaveProperty('problemNo', 1)
       expect(typeof res.data.problemNo).toBe('number')

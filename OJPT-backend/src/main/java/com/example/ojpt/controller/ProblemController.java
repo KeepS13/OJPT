@@ -59,6 +59,14 @@ public class ProblemController {
         return Result.ok(vo);
     }
 
+    @GetMapping("/no/{problemNo}")
+    @Operation(summary = "通过题号获取题目详情（学员端）", description = "通过题号获取题目详情，匿名可访问，仅返回已发布题目")
+    public Result<ProblemDetailVO> getProblemDetailByNo(@PathVariable("problemNo") Integer problemNo) {
+        Long userId = getCurrentUserId();
+        ProblemDetailVO vo = problemService.getProblemDetailByNo(problemNo, userId);
+        return Result.ok(vo);
+    }
+
     @PostMapping
     @Operation(summary = "创建题目草稿", description = "任意登录用户可以创建题目草稿，待管理员审核后发布到正式题库")
     public Result<ProblemSimpleVO> createProblemDraft(@Valid @RequestBody ProblemCreateDTO dto) {

@@ -17,3 +17,7 @@ export function getProblemDetail(problemId: string | number) {
   return request.get(`/problems/${problemId}`)
 }
 
+export function getProblemDetailByNo(problemNo: string | number) {
+  return request.get(`/problems/no/${problemNo}`)
+}
+
