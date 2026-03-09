@@ -90,22 +90,34 @@ const onSubmit = async (values: LoginForm, setFieldValue?: (field: string, value
     emit('update:modelValue', false)
   } catch (error: unknown) {
     const resp = (error as {
-      response?: { data?: { message?: string; remainingSeconds?: number }; status?: number }
+      response?: { data?: { message?: string; data?: { remainingSeconds?: number } }; status?: number }
       message?: string
     })?.response
 
+    const remainingSeconds = resp?.data?.data?.remainingSeconds
     const banMsg =
-      resp?.status === 403 && resp?.data?.remainingSeconds !== undefined
-        ? `账号已被封禁，剩余：${formatRemaining(resp.data.remainingSeconds)}`
+      resp?.status === 403 && remainingSeconds !== undefined
+        ? `账号已被封禁，剩余：${formatRemaining(remainingSeconds)}`
+        : null
+
+    const serverMsg = resp?.data?.message
+
+    // 统一登录错误提示：把常见英文/无 message 场景映射为更友好的中文
+    const normalized401Msg =
+      resp?.status === 401
+        ? serverMsg && /bad credentials/i.test(serverMsg)
+          ? '用户名或密码错误'
+          : serverMsg || '用户名或密码错误'
         : null
 
     const msg =
       banMsg ??
-      resp?.data?.message ??
+      normalized401Msg ??
+      serverMsg ??
       (resp?.status === undefined
-        ? '登录失败：服务不可用，请检查网络连接'
+        ? '登录失败：网络异常，请检查连接后重试'
         : (error as { message?: string })?.message) ??
-      '登录失败：请稍后重试或检查账号密码'
+      '登录失败：请稍后重试'
     ElMessage.error(msg)
   } finally {
     loading.value = false

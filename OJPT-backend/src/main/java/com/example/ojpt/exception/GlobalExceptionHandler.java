@@ -68,7 +68,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BadCredentialsException.class)
     public ResponseEntity<Result<Void>> handleBadCredentialsException(BadCredentialsException ex) {
         String message = ex.getMessage();
-        if (message == null || message.isBlank()) {
+        // Spring Security 默认会给出 "Bad credentials"，这里统一为中文提示，避免前端展示英文
+        if (message == null || message.isBlank() || "Bad credentials".equalsIgnoreCase(message)) {
             message = "用户名或密码错误";
         }
         log.warn("登录凭证错误: {}", message);
