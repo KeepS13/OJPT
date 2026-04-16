@@ -331,4 +331,5 @@
 - **测试与调优**：整体测试与调优体系尚处于规划与起步阶段，本文件给出了统一的结构与追踪入口，后续需要在实际迭代中逐项补充与完善；开发环境已启用 Spring Boot DevTools 自动重启与 LiveReload 能力，以提升迭代效率。
 - **进展（当前阶段）**：已读取 `.cursor/doc/PROJECT-PLAN.md` 与 `ojpt-skill-rules.mdc`，确认后续将按模块对后端/前端/接口/测试进行“项目级读取与梳理”。
 - **进展（Git 相关）**：已检查 `git status/remote`，当前 `main` 与 `origin/main` 同步，但本地存在未提交的修改与若干未跟踪新文件；上传 GitHub 需要先确认是否先提交再 push。
+- **进展（GitHub）**：已完成 `git add/commit/push`，推送到 `origin/main`（提交 `9b7a7d3`）。
 
