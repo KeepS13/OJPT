@@ -21,6 +21,10 @@ import type {
   PlatformStatisticsOverview,
   UserStatistics,
   SchoolStatistics,
+  AdminProblemListItemVO,
+  AdminProblemListParams,
+  ProblemUpdateDTO,
+  TagVO,
 } from '@/types/admin'
 import type { UserUpdateDTO } from './user'
 
@@ -169,6 +173,40 @@ export function getUserStatistics() {
 // 获取学校数据统计
 export function getSchoolStatistics() {
   return request.get<SchoolStatistics>('/admin/statistics/schools')
+}
+
+// ========= 题库管理（Admin Problems）=========
+
+export function getAdminProblemList(params?: AdminProblemListParams) {
+  return request.get<PageResponse<AdminProblemListItemVO>>('/admin/problems', { params })
+}
+
+export function getAdminProblemDetail(problemId: string) {
+  return request.get<unknown>(`/admin/problems/${problemId}`)
+}
+
+export function updateAdminProblem(problemId: string, payload: ProblemUpdateDTO) {
+  return request.put<void>(`/admin/problems/${problemId}`, payload)
+}
+
+export function publishAdminProblem(problemId: string) {
+  return request.post<void>(`/admin/problems/${problemId}:publish`)
+}
+
+export function archiveAdminProblem(problemId: string) {
+  return request.post<void>(`/admin/problems/${problemId}:archive`)
+}
+
+export function getAdminTags() {
+  return request.get<TagVO[]>('/admin/tags')
+}
+
+export function addTagToAdminProblem(problemId: string, tagId: string | number) {
+  return request.post<void>(`/admin/problems/${problemId}/tags`, undefined, { params: { tagId } })
+}
+
+export function removeTagFromAdminProblem(problemId: string, tagId: string | number) {
+  return request.delete<void>(`/admin/problems/${problemId}/tags`, { params: { tagId } })
 }
 
 

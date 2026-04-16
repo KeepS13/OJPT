@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import LoginDialog from '@/components/auth/LoginDialog.vue'
 import UserAvatar from '@/components/common/UserAvatar.vue'
 import ProblemTimer from '@/components/problem/ProblemTimer.vue'
@@ -9,6 +9,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { getProblemDetailByNo } from '@/api/problem'
 import { createSubmission } from '@/api/submission'
 import { renderMarkdown } from '@/utils/markdown'
+import { defaultLanguageTemplates, type SupportedLanguage } from '@/constants/languageTemplates'
 
 const route = useRoute()
 const router = useRouter()
@@ -47,29 +48,14 @@ const statementHtml = computed(() =>
   problemDetail.value?.statementMd ? renderMarkdown(problemDetail.value.statementMd) : '',
 )
 
-const languages = ['C++', 'Java', 'Python3', 'C', 'Go', 'JavaScript']
-const activeLanguage = ref('C++')
+const languages: SupportedLanguage[] = ['C/C++', 'Java', 'Python3']
+const activeLanguage = ref<SupportedLanguage>('C/C++')
 
-const getDefaultCodeTemplate = (lang: string) => {
-  switch (lang) {
-    case 'C++':
-      return `class Solution {\npublic:\n    vector<int> twoSum(vector<int>& nums, int target) {\n\n    }\n};\n`
-    case 'Java':
-      return `class Solution {\n    public int[] twoSum(int[] nums, int target) {\n\n    }\n}\n`
-    case 'Python3':
-      return `class Solution:\n    def twoSum(self, nums, target):\n        \n`
-    case 'C':
-      return `int* twoSum(int* nums, int numsSize, int target, int* returnSize){\n\n}\n`
-    case 'Go':
-      return `func twoSum(nums []int, target int) []int {\n\n}\n`
-    case 'JavaScript':
-      return `/**\n * @param {number[]} nums\n * @param {number} target\n * @return {number[]}\n */\nvar twoSum = function(nums, target) {\n\n};\n`
-    default:
-      return ``
-  }
+const resolveTemplate = (lang: SupportedLanguage, problem: ProblemDetailVO | null): string => {
+  return defaultLanguageTemplates[lang]?.template ?? ''
 }
 
-const code = ref<string>(getDefaultCodeTemplate(activeLanguage.value))
+const code = ref<string>(resolveTemplate(activeLanguage.value, null))
 
 // 代码编辑器：行号与滚动同步
 const codeEditorRef = ref<HTMLTextAreaElement | null>(null)
@@ -85,12 +71,50 @@ const syncCodeScroll = () => {
 }
 
 const resetCodeToDefault = () => {
-  code.value = getDefaultCodeTemplate(activeLanguage.value)
+  code.value = resolveTemplate(activeLanguage.value, problemDetail.value)
   nextTick(() => {
     if (codeEditorRef.value) codeEditorRef.value.scrollTop = 0
     if (lineNumbersRef.value) lineNumbersRef.value.scrollTop = 0
   })
 }
+
+watch(
+  activeLanguage,
+  async (nextLang, prevLang) => {
+    if (!prevLang || nextLang === prevLang) return
+
+    const prevTemplate = resolveTemplate(prevLang, problemDetail.value).trim()
+    const currentCode = code.value.trim()
+
+    if (currentCode === prevTemplate) {
+      code.value = resolveTemplate(nextLang, problemDetail.value)
+      await nextTick(() => {
+        if (codeEditorRef.value) codeEditorRef.value.scrollTop = 0
+        if (lineNumbersRef.value) lineNumbersRef.value.scrollTop = 0
+      })
+      return
+    }
+
+    try {
+      await ElMessageBox.confirm(
+        '切换语言将使用该语言的默认模板，当前代码不会自动保存。确认切换吗？',
+        '切换语言',
+        {
+          confirmButtonText: '切换',
+          cancelButtonText: '取消',
+          type: 'warning',
+        },
+      )
+      code.value = resolveTemplate(nextLang, problemDetail.value)
+      await nextTick(() => {
+        if (codeEditorRef.value) codeEditorRef.value.scrollTop = 0
+        if (lineNumbersRef.value) lineNumbersRef.value.scrollTop = 0
+      })
+    } catch {
+      activeLanguage.value = prevLang
+    }
+  },
+)
 
 const runCodeWithTestCases = () => {
   // TODO: 接入后端/沙箱执行。这里先做交互占位，避免按钮无响应。
@@ -526,8 +550,11 @@ const handleSubmit = async () => {
     return
   }
 
-  const pid = problemDetail.value?.id ?? String(problemId)
-  if (!pid) return
+  const pid = problemDetail.value?.id
+  if (!pid) {
+    ElMessage.error('题目未加载完成，请稍后再试')
+    return
+  }
 
   submitting.value = true
   try {
@@ -1384,11 +1411,40 @@ code {
 
 .language-select {
   font-size: 13px;
-  padding: 4px 8px;
+  font-weight: 500;
+  color: #111827;
+  min-width: 124px;
+  padding: 6px 32px 6px 14px;
   border-radius: 999px;
   border: 1px solid #e5e7eb;
-  outline: none;
   background-color: #ffffff;
+  outline: none;
+  appearance: none;
+  cursor: pointer;
+  line-height: 1.25;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+  transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+  /* 右侧下拉箭头（SVG） */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5' stroke='%236b7280' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 12px 12px;
+}
+
+.language-select:hover {
+  border-color: #c7d2fe;
+  background-color: #fbfbff;
+  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.08);
+}
+
+.language-select:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15), 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+.language-select option {
+  font-weight: 400;
+  color: #111827;
 }
 
 .editor-header-right {

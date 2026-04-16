@@ -1,0 +1,32 @@
+[
+  {
+    "fig_no": "4-1",
+    "fig_name": "系统总体架构图",
+    "file": ".docx/论文/assets/figures/fig-4-1-architecture.png"
+  },
+  {
+    "fig_no": "4-2",
+    "fig_name": "数据库概念结构图",
+    "file": ".docx/论文/assets/figures/fig-4-2-database-er.png"
+  },
+  {
+    "fig_no": "4-3",
+    "fig_name": "管理端题目发布归档业务流程图",
+    "file": ".docx/论文/assets/figures/fig-4-3-admin-flow.png"
+  },
+  {
+    "fig_no": "5-1",
+    "fig_name": "学员端做题与提交链路流程图",
+    "file": ".docx/论文/assets/figures/fig-5-1-solve-submit.png"
+  },
+  {
+    "fig_no": "5-2",
+    "fig_name": "Markdown 渲染与安全清洗处理流程图",
+    "file": ".docx/论文/assets/figures/fig-5-2-md-sanitize.png"
+  },
+  {
+    "fig_no": "5-3",
+    "fig_name": "端到端测试关键回归点覆盖图",
+    "file": ".docx/论文/assets/figures/fig-5-3-e2e.png"
+  }
+]

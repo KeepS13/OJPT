@@ -1,10 +1,20 @@
 {
   "version": 1,
   "skills": {
+    "humanize-academic-writing": {
+      "source": "momo2young/humanize-academic-writing",
+      "sourceType": "github",
+      "computedHash": "a014c0a5878ce277f00ab5dfa78e339cd159d447376b1bdc02335783b011e8e2"
+    },
     "langchain4j-spring-boot-integration": {
       "source": "giuseppe-trisciuoglio/developer-kit",
       "sourceType": "github",
       "computedHash": "78454de9b6412ed251a195399e05ee91c6ca3922ff87647ffca7e5d349e8db13"
+    },
+    "latex-thesis-zh": {
+      "source": "bahayonghang/academic-writing-skills",
+      "sourceType": "github",
+      "computedHash": "0828492f8d6309721f03a8eb983de7a7847c678af24ad75763e438f5691dcd8b"
     },
     "spring-ai-mcp-server-patterns": {
       "source": "giuseppe-trisciuoglio/developer-kit",

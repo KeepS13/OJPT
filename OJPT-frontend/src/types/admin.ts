@@ -132,6 +132,49 @@ export interface SchoolStatistics {
   }
 }
 
+// ========== 题库管理（Admin Problems）==========
+
+export type ProblemDifficulty = 'EASY' | 'MEDIUM' | 'HARD'
+export type ProblemPublishStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED'
+
+export interface TagVO {
+  id: string
+  name: string
+  type?: string
+}
+
+export interface AdminProblemListParams {
+  page?: number
+  size?: number
+  keyword?: string
+  difficulty?: ProblemDifficulty
+  tagId?: string | number
+  status?: ProblemPublishStatus
+  orderBy?: string
+}
+
+export interface AdminProblemListItemVO {
+  id: string
+  problemNo?: number | null
+  title: string
+  difficulty: ProblemDifficulty
+  status: ProblemPublishStatus
+  submitCount?: number | null
+  acceptedCount?: number | null
+  acceptanceRate?: number | null
+  tags?: TagVO[] | null
+  createdAt?: string | null
+  updatedAt?: string | null
+}
+
+export interface ProblemUpdateDTO {
+  title?: string
+  difficulty?: ProblemDifficulty
+  statementMd?: string
+  timeLimitMs?: number | null
+  memoryLimitKb?: number | null
+}
+
 // 导出其他类型
 export type { UserDetail, SchoolVO, SchoolCreateDTO, SchoolUpdateDTO }
 

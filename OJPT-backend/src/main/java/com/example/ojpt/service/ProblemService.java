@@ -3,6 +3,7 @@ package com.example.ojpt.service;
 import com.example.ojpt.common.PageResult;
 import com.example.ojpt.dto.ProblemCreateDTO;
 import com.example.ojpt.dto.ProblemUpdateDTO;
+import com.example.ojpt.vo.AdminProblemListItemVO;
 import com.example.ojpt.vo.ProblemDetailVO;
 import com.example.ojpt.vo.ProblemListItemVO;
 import com.example.ojpt.vo.ProblemSimpleVO;
@@ -33,6 +34,19 @@ public interface ProblemService {
      * 根据 ID 获取题目（主要用于管理端查看）。
      */
     ProblemSimpleVO getProblem(Long problemId);
+
+    /**
+     * 管理端分页查询题目列表（支持按状态筛选草稿/已发布/归档）。
+     */
+    PageResult<AdminProblemListItemVO> queryAdminProblems(
+            Integer page,
+            Integer size,
+            String keyword,
+            String difficulty,
+            Long tagId,
+            String status,
+            String orderBy
+    );
 
     /**
      * 学员端分页查询题目列表（支持匿名访问，提交状态依赖登录用户）。

@@ -3,6 +3,7 @@ package com.example.ojpt.vo;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 管理端/列表使用的题目简要视图。
@@ -26,6 +27,17 @@ public class ProblemSimpleVO {
     private Long submitCount;
 
     private Long acceptedCount;
+
+    /**
+     * 题面 Markdown（编辑页需要）。
+     */
+    private String statementMd;
+
+    private Integer timeLimitMs;
+
+    private Integer memoryLimitKb;
+
+    private List<TagVO> tags;
 
     private LocalDateTime createdAt;
 

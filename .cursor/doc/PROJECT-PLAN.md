@@ -48,13 +48,14 @@
 #### P0-2 管理端题库“草稿→审核→发布/归档”最小闭环（效果核心）
 
 - **后端（如缺口则补齐）**
-  - 新增/确认：`GET /api/admin/problems`（分页 + 关键字 + status=DRAFT/PUBLISHED/ARCHIVED + 排序）
+  - 新增/确认：`GET /api/admin/problems`（分页 + 关键字 + status=DRAFT/PUBLISHED/ARCHIVED，默认按题号 `problemNo` 升序，可按更新时间等排序）
   - 复用：`GET /api/admin/problems/{problemId}`、`PUT /api/admin/problems/{problemId}`
   - 复用：`POST /api/admin/problems/{problemId}:publish`、`POST /api/admin/problems/{problemId}:archive`
 - **前端（必须补齐 UI）**
-  - 题目管理列表页：Tab（DRAFT/PUBLISHED/ARCHIVED）；行操作（查看/编辑/发布/归档）
-  - 题目编辑页：标题、难度、题面 Markdown、限时/内存、标签；发布前必填校验
-- **验收**：普通用户创建草稿（DRAFT）→ 管理员后台列表可见 → 编辑 → 发布 → 学员端立刻可见
+  - 题目管理列表页：Tab（默认定位到 PUBLISHED，其次 DRAFT/ARCHIVED），支持按题号顺序浏览；行操作（查看/编辑/发布/归档）
+  - 题目编辑页：标题、难度、题面 Markdown、限时/内存、标签；Markdown 左右分栏实时预览；发布前必填校验
+- **验收（已跑通）**：普通用户创建草稿（DRAFT）→ 管理员后台 `/admin/problems` 列表可见（按题号排序，默认展示“已发布”）→ 编辑（含 Markdown 实时预览 + 标签绑定）→ 发布 → 学员端 `/problemset` 与 `/problems/{problemNo}` 立刻可见
+  - 自动化：已补 Playwright `tests/e2e/admin-problem-flow.spec.ts` 覆盖该链路
 
 #### P0-3 标签能力“先够用”
 
@@ -145,7 +146,7 @@
 | 功能编号 | 功能名称               | 所属模块       | 状态     | 前端          | 后端          | 测试                           | 调优需求      | 备注 |
 |---------|------------------------|----------------|----------|---------------|---------------|--------------------------------|---------------|------|
 | BK-001  | 题目 CRUD              | 题库管理       | 已完成   | 部分实现      | 已实现        | TS API 单测 + 接口联调冒烟     | 是（体验）    | **P0**：学员端题库列表/详情已接入后端；草稿创建已支持；管理端更新/发布/归档已支持；已修复分页 `total/pages=0`（装配 MyBatis-Plus 分页拦截器）；后续补“管理端 UI/批量导入导出/更完整的交互状态” |
-| BK-002  | 标签与难度管理         | 题库管理       | 进行中   | 未实现        | 已实现（标签与绑定接口） | TS API 单测（标签管理）       | 否            | 管理端标签创建/绑定接口已就绪，前端管理界面后续迭代 |
+| BK-002  | 标签与难度管理         | 题库管理       | 进行中   | 部分实现      | 已实现（标签与绑定接口） | TS API 单测（标签管理）       | 否            | 管理端标签创建/绑定接口已就绪；前端已支持在“题目编辑页”进行标签绑定/解绑，标签 CRUD 管理页后续迭代 |
 | BK-003  | 题目展示编号（problemNo） | 题库管理       | 已完成   | 已实现        | 已实现        | TS API 单测 + E2E 测试（待运行） | 否            | **P0**：稳定展示题号（P0001）；学员端详情路由 `/problems/{problemNo}`；后端 `GET /api/problems/no/{problemNo}`（仅已发布可匿名访问）；提交等内部仍用雪花 id；unit/api/problem.spec.ts 已新增用例 |
 | JD-001  | 提交与判题（stub 阶段） | 评测系统       | 进行中   | 部分实现（API 层） | 已实现（Submission stub + 进度表） | TS API 单测；后续补 E2E | 是（性能+可靠性） | **P0**：可演示提交链路（stub）；后续接入真实判题与队列 |
 | JD-002  | 多语言支持与资源限制    | 评测系统       | 未开始   | 未实现        | 未实现        | 未设计                         | 是（性能+安全） | - |
@@ -328,4 +329,6 @@
 - **前端**：Vue 3 + Element Plus 的基础框架已搭建，认证流程和部分管理端页面已有雏形，路由守卫与全局状态管理已形成基本结构。
 - **部署**：Nginx 统一入口配置已就绪，支持前端静态资源与 `/api` 代理；本地和生产环境的路径约定（特别是 `/uploads`）需要持续对齐。
 - **测试与调优**：整体测试与调优体系尚处于规划与起步阶段，本文件给出了统一的结构与追踪入口，后续需要在实际迭代中逐项补充与完善；开发环境已启用 Spring Boot DevTools 自动重启与 LiveReload 能力，以提升迭代效率。
+- **进展（当前阶段）**：已读取 `.cursor/doc/PROJECT-PLAN.md` 与 `ojpt-skill-rules.mdc`，确认后续将按模块对后端/前端/接口/测试进行“项目级读取与梳理”。
+- **进展（Git 相关）**：已检查 `git status/remote`，当前 `main` 与 `origin/main` 同步，但本地存在未提交的修改与若干未跟踪新文件；上传 GitHub 需要先确认是否先提交再 push。
 

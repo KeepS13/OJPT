@@ -22,6 +22,7 @@ import com.example.ojpt.service.UserService;
 import com.example.ojpt.service.ProblemService;
 import com.example.ojpt.service.TagService;
 import com.example.ojpt.service.SubmissionService;
+import com.example.ojpt.vo.AdminProblemListItemVO;
 import com.example.ojpt.vo.PermissionVO;
 import com.example.ojpt.vo.ProblemSimpleVO;
 import com.example.ojpt.vo.RoleVO;
@@ -283,6 +284,22 @@ public class AdminController {
     }
 
     // 题库管理（仅 ADMIN）
+
+    @GetMapping("/problems")
+    @Operation(summary = "管理端题目列表（草稿池）", description = "分页查询题目列表，支持关键字、难度、标签、状态和排序")
+    public Result<PageResult<AdminProblemListItemVO>> listAdminProblems(
+            @RequestParam(value = "page", required = false, defaultValue = "1") Integer page,
+            @RequestParam(value = "size", required = false, defaultValue = "20") Integer size,
+            @RequestParam(value = "keyword", required = false) String keyword,
+            @RequestParam(value = "difficulty", required = false) String difficulty,
+            @RequestParam(value = "tagId", required = false) Long tagId,
+            @RequestParam(value = "status", required = false) String status,
+            @RequestParam(value = "orderBy", required = false) String orderBy
+    ) {
+        PageResult<AdminProblemListItemVO> pageResult =
+                problemService.queryAdminProblems(page, size, keyword, difficulty, tagId, status, orderBy);
+        return Result.ok(pageResult);
+    }
 
     @GetMapping("/problems/{problemId}")
     @Operation(summary = "获取题目详情（管理端）", description = "根据题目ID获取题目基础信息")

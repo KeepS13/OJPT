@@ -6,6 +6,7 @@ import com.example.ojpt.common.PageResult;
 import com.example.ojpt.common.PaginationUtils;
 import com.example.ojpt.dto.ProblemCreateDTO;
 import com.example.ojpt.dto.ProblemUpdateDTO;
+import com.example.ojpt.vo.AdminProblemListItemVO;
 import com.example.ojpt.entity.Problem;
 import com.example.ojpt.entity.ProblemTag;
 import com.example.ojpt.entity.Tag;
@@ -127,7 +128,127 @@ public class ProblemServiceImpl implements ProblemService {
         if (problem == null) {
             throw BusinessException.notFound("题目不存在");
         }
-        return toSimpleVO(problem);
+        ProblemSimpleVO vo = toSimpleVO(problem);
+        vo.setTags(loadTagVos(problemId));
+        return vo;
+    }
+
+    @Override
+    public PageResult<AdminProblemListItemVO> queryAdminProblems(
+            Integer page,
+            Integer size,
+            String keyword,
+            String difficulty,
+            Long tagId,
+            String status,
+            String orderBy
+    ) {
+        int p = PaginationUtils.normalizePage(page);
+        int s = PaginationUtils.normalizeSize(size);
+
+        Page<Problem> pageParam = new Page<>(p, s);
+
+        LambdaQueryWrapper<Problem> wrapper = new LambdaQueryWrapper<Problem>()
+                .eq(Problem::getIsDeleted, 0);
+
+        if (keyword != null && !keyword.isBlank()) {
+            wrapper.like(Problem::getTitle, keyword.trim());
+        }
+        if (difficulty != null && !difficulty.isBlank()) {
+            wrapper.eq(Problem::getDifficulty, difficulty.trim());
+        }
+        if (status != null && !status.isBlank()) {
+            wrapper.eq(Problem::getStatus, status.trim());
+        }
+
+        // 标签过滤：通过 problem_tag 中间表筛选 problemId
+        if (tagId != null) {
+            List<Long> tagProblemIds = problemTagMapper.selectList(
+                    new LambdaQueryWrapper<ProblemTag>()
+                            .eq(ProblemTag::getTagId, tagId)
+            ).stream().map(ProblemTag::getProblemId).distinct().toList();
+            if (tagProblemIds.isEmpty()) {
+                return PageResult.empty(p, s);
+            }
+            wrapper.in(Problem::getId, tagProblemIds);
+        }
+
+        // 排序（管理端默认按题号正序，便于人工查找）
+        if ("ID".equalsIgnoreCase(orderBy)) {
+            wrapper.orderByAsc(Problem::getProblemNo);
+        } else if ("DIFFICULTY".equalsIgnoreCase(orderBy)) {
+            wrapper.orderByAsc(Problem::getDifficulty).orderByAsc(Problem::getProblemNo);
+        } else if ("ACCEPTANCE".equalsIgnoreCase(orderBy)) {
+            wrapper.orderByDesc(Problem::getAcceptedCount);
+        } else if ("UPDATED".equalsIgnoreCase(orderBy)) {
+            wrapper.orderByDesc(Problem::getUpdatedAt).orderByAsc(Problem::getProblemNo);
+        } else {
+            // 默认：按题号升序
+            wrapper.orderByAsc(Problem::getProblemNo);
+        }
+
+        Page<Problem> result = problemMapper.selectPage(pageParam, wrapper);
+        if (result.getRecords().isEmpty()) {
+            return PageResult.empty(p, s);
+        }
+
+        List<Problem> problems = result.getRecords();
+        List<Long> problemIds = problems.stream().map(Problem::getId).toList();
+
+        // 查询标签
+        List<ProblemTag> problemTags = problemTagMapper.selectList(
+                new LambdaQueryWrapper<ProblemTag>()
+                        .in(ProblemTag::getProblemId, problemIds)
+        );
+        List<Long> tagIds = problemTags.stream().map(ProblemTag::getTagId).distinct().toList();
+        Map<Long, Tag> tagMap = tagIds.isEmpty()
+                ? Map.of()
+                : tagMapper.selectBatchIds(tagIds).stream()
+                .collect(Collectors.toMap(Tag::getId, t -> t));
+
+        Map<Long, List<Tag>> problemIdToTags = problemTags.stream().collect(
+                Collectors.groupingBy(
+                        ProblemTag::getProblemId,
+                        Collectors.mapping(
+                                pt -> tagMap.get(pt.getTagId()),
+                                Collectors.toList()
+                        )
+                )
+        );
+
+        List<AdminProblemListItemVO> listVos = problems.stream()
+                .map(p2 -> {
+                    AdminProblemListItemVO vo = new AdminProblemListItemVO();
+                    vo.setId(p2.getId());
+                    vo.setProblemNo(p2.getProblemNo());
+                    vo.setTitle(p2.getTitle());
+                    vo.setDifficulty(p2.getDifficulty());
+                    vo.setStatus(p2.getStatus());
+                    vo.setSubmitCount(p2.getSubmitCount());
+                    vo.setAcceptedCount(p2.getAcceptedCount());
+                    if (p2.getSubmitCount() != null && p2.getSubmitCount() > 0) {
+                        double rate = (double) (p2.getAcceptedCount() == null ? 0 : p2.getAcceptedCount())
+                                / p2.getSubmitCount() * 100.0;
+                        vo.setAcceptanceRate(Math.round(rate * 10.0) / 10.0);
+                    }
+                    List<TagVO> tags = problemIdToTags.getOrDefault(p2.getId(), List.of()).stream()
+                            .filter(Objects::nonNull)
+                            .map(t -> {
+                                TagVO tvo = new TagVO();
+                                tvo.setId(t.getId());
+                                tvo.setName(t.getName());
+                                tvo.setType(t.getType());
+                                return tvo;
+                            })
+                            .toList();
+                    vo.setTags(tags);
+                    vo.setCreatedAt(p2.getCreatedAt());
+                    vo.setUpdatedAt(p2.getUpdatedAt());
+                    return vo;
+                })
+                .toList();
+
+        return PageResult.of(listVos, result.getTotal(), result.getCurrent(), result.getSize());
     }
 
     @Override
@@ -367,9 +488,32 @@ public class ProblemServiceImpl implements ProblemService {
         vo.setStatus(problem.getStatus());
         vo.setSubmitCount(problem.getSubmitCount());
         vo.setAcceptedCount(problem.getAcceptedCount());
+        vo.setStatementMd(problem.getStatementMd());
+        vo.setTimeLimitMs(problem.getTimeLimitMs());
+        vo.setMemoryLimitKb(problem.getMemoryLimitKb());
         vo.setCreatedAt(problem.getCreatedAt());
         vo.setUpdatedAt(problem.getUpdatedAt());
         return vo;
+    }
+
+    private List<TagVO> loadTagVos(Long problemId) {
+        List<ProblemTag> problemTags = problemTagMapper.selectList(
+                new LambdaQueryWrapper<ProblemTag>()
+                        .eq(ProblemTag::getProblemId, problemId)
+        );
+        List<Long> tagIds = problemTags.stream().map(ProblemTag::getTagId).distinct().toList();
+        if (tagIds.isEmpty()) {
+            return List.of();
+        }
+        return tagMapper.selectBatchIds(tagIds).stream()
+                .map(t -> {
+                    TagVO vo = new TagVO();
+                    vo.setId(t.getId());
+                    vo.setName(t.getName());
+                    vo.setType(t.getType());
+                    return vo;
+                })
+                .toList();
     }
 }
 

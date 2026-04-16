@@ -19,6 +19,8 @@ import {
   RoleManagement,
   PermissionManagement,
   SchoolManagement,
+  ProblemManagement,
+  ProblemEdit,
 } from '@/views/admin'
 
 const router = createRouter({
@@ -103,6 +105,16 @@ const router = createRouter({
           path: 'schools',
           name: 'admin-schools',
           component: SchoolManagement,
+        },
+        {
+          path: 'problems',
+          name: 'admin-problems',
+          component: ProblemManagement,
+        },
+        {
+          path: 'problems/:problemId',
+          name: 'admin-problem-edit',
+          component: ProblemEdit,
         },
       ],
     },

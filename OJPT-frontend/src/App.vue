@@ -23,7 +23,7 @@ const showTopNav = computed(() => {
   display: flex;
   flex-direction: column;
   padding: 10px 10px 0;
-  overflow: hidden;
+  overflow: auto;
   box-sizing: border-box;
 }
 </style>

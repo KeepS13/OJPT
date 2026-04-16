@@ -8,6 +8,7 @@ import {
   Key,
   Lock,
   School,
+  Collection,
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -23,6 +24,7 @@ const menuItems = [
   { path: '/admin/roles', icon: Key, title: '角色管理' },
   { path: '/admin/permissions', icon: Lock, title: '权限管理' },
   { path: '/admin/schools', icon: School, title: '学校管理' },
+  { path: '/admin/problems', icon: Collection, title: '题库管理' },
 ]
 
 const handleMenuSelect = (path: string) => {
@@ -122,5 +124,7 @@ const handleMenuSelect = (path: string) => {
 .admin-main {
   padding: 24px;
   background-color: #f5f7fa;
+  overflow: auto;
+  min-height: 0;
 }
 </style>
