@@ -4,10 +4,8 @@ import { useRoute, useRouter, RouterLink } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import LoginDialog from '@/components/auth/LoginDialog.vue'
 import UserAvatar from '@/components/common/UserAvatar.vue'
-import ProblemTimer from '@/components/problem/ProblemTimer.vue'
 import { useAuth } from '@/hooks/useAuth'
 import { getProblemDetailByNo } from '@/api/problem'
-import { createSubmission } from '@/api/submission'
 import { renderMarkdown } from '@/utils/markdown'
 import { defaultLanguageTemplates, type SupportedLanguage } from '@/constants/languageTemplates'
 
@@ -42,7 +40,6 @@ interface ProblemDetailVO {
 
 const problemDetail = ref<ProblemDetailVO | null>(null)
 const loadingProblem = ref(false)
-const submitting = ref(false)
 
 const statementHtml = computed(() =>
   problemDetail.value?.statementMd ? renderMarkdown(problemDetail.value.statementMd) : '',
@@ -115,11 +112,6 @@ watch(
     }
   },
 )
-
-const runCodeWithTestCases = () => {
-  // TODO: 接入后端/沙箱执行。这里先做交互占位，避免按钮无响应。
-  console.log('run: 调用测试用例运行（占位）')
-}
 
 const loadProblemDetail = async () => {
   loadingProblem.value = true
@@ -260,7 +252,7 @@ const updateTestCaseInput = (caseIndex: number, inputIndex: number, value: strin
 }
 
 // 图标按钮悬停提示（下拉面板）
-type IconHintKind = 'reset' | 'run' | null
+type IconHintKind = 'reset' | null
 const iconHint = ref<IconHintKind>(null)
 let iconHintHideTimeout: number | null = null
 
@@ -501,15 +493,11 @@ const displayName = computed(() => {
   return user.value?.username || user.value?.email || ''
 })
 
-const userRoles = computed(() => user.value?.roles ?? [])
-
 const roleDisplay = computed(() => {
   const code = user.value?.roleType
   if (!code) return null
   const map: Record<string, { tag: string }> = {
-    USER: { tag: '学员' },
-    TEACHER: { tag: '教师' },
-    SCHOOL: { tag: '校方' },
+    USER: { tag: '用户' },
     ADMIN: { tag: '管理员' },
   }
   return map[code] ?? { tag: code }
@@ -542,40 +530,6 @@ const handleLogout = () => {
   logout()
   showMenu.value = false
   router.push('/')
-}
-
-const handleSubmit = async () => {
-  if (!isAuthed.value) {
-    openLogin()
-    return
-  }
-
-  const pid = problemDetail.value?.id
-  if (!pid) {
-    ElMessage.error('题目未加载完成，请稍后再试')
-    return
-  }
-
-  submitting.value = true
-  try {
-    const res = await createSubmission({
-      problemId: pid,
-      language: activeLanguage.value,
-      sourceCode: code.value,
-    })
-    const body: any = res.data
-    const data = body && typeof body === 'object' && 'data' in body ? body.data : body
-    const status = data?.status
-    if (status === 'QUEUED') {
-      ElMessage.success('提交成功，已加入评测队列（占位）')
-    } else {
-      ElMessage.success('提交成功')
-    }
-  } catch (e) {
-    ElMessage.error('提交失败，请稍后重试')
-  } finally {
-    submitting.value = false
-  }
 }
 </script>
 
@@ -612,7 +566,6 @@ const handleSubmit = async () => {
             </span>
           </div>
           <div class="solve-user-area">
-            <ProblemTimer />
             <button
               v-if="!isAuthed"
               type="button"
@@ -647,28 +600,7 @@ const handleSubmit = async () => {
                   <div class="user-menu__body">
                     <RouterLink to="/profile" class="user-menu__item">个人中心</RouterLink>
                     <RouterLink
-                      v-if="userRoles.includes('STUDENT')"
-                      to="/student"
-                      class="user-menu__item"
-                    >
-                      学员中心
-                    </RouterLink>
-                    <RouterLink
-                      v-if="userRoles.includes('TEACHER')"
-                      to="/teacher"
-                      class="user-menu__item"
-                    >
-                      教师后台
-                    </RouterLink>
-                    <RouterLink
-                      v-if="userRoles.includes('SCHOOL')"
-                      to="/school"
-                      class="user-menu__item"
-                    >
-                      校方管理
-                    </RouterLink>
-                    <RouterLink
-                      v-if="userRoles.includes('ADMIN')"
+                      v-if="user?.roles?.includes('ADMIN')"
                       to="/admin"
                       class="user-menu__item"
                     >
@@ -797,19 +729,6 @@ const handleSubmit = async () => {
               </select>
             </div>
             <div class="editor-header-right">
-              <div class="icon-hint-wrapper" @mouseenter="onIconHintEnter('run')" @mouseleave="onIconHintLeave">
-                <button
-                  type="button"
-                  class="btn-secondary btn-icon"
-                  aria-label="调用测试用例运行"
-                  @click="runCodeWithTestCases"
-                >
-                  <span class="btn-icon__glyph" aria-hidden="true">▶</span>
-                </button>
-                <transition name="fade">
-                  <div v-if="iconHint === 'run'" class="icon-hint-panel">调用测试用例运行</div>
-                </transition>
-              </div>
               <div class="icon-hint-wrapper" @mouseenter="onIconHintEnter('reset')" @mouseleave="onIconHintLeave">
                 <button
                   type="button"
@@ -823,14 +742,6 @@ const handleSubmit = async () => {
                   <div v-if="iconHint === 'reset'" class="icon-hint-panel">还原到默认的代码模版</div>
                 </transition>
               </div>
-              <button
-                type="button"
-                class="btn-primary"
-                :disabled="submitting"
-                @click="handleSubmit"
-              >
-                {{ submitting ? '提交中...' : '提交' }}
-              </button>
             </div>
           </header>
 
@@ -1130,18 +1041,6 @@ const handleSubmit = async () => {
 
 .role-badge--user {
   background: linear-gradient(135deg, #60a5fa, #3b82f6);
-}
-
-.role-badge--student {
-  background: linear-gradient(135deg, #818cf8, #6366f1);
-}
-
-.role-badge--teacher {
-  background: linear-gradient(135deg, #34d399, #059669);
-}
-
-.role-badge--school {
-  background: linear-gradient(135deg, #fbbf24, #f59e0b);
 }
 
 .role-badge--admin {
@@ -1453,8 +1352,7 @@ code {
   gap: 8px;
 }
 
-.btn-secondary,
-.btn-primary {
+.btn-secondary {
   border-radius: 999px;
   padding: 5px 12px;
   font-size: 12px;
@@ -1512,15 +1410,6 @@ code {
 
 .btn-secondary:hover {
   background-color: #e5e7eb;
-}
-
-.btn-primary {
-  background-color: #22c55e;
-  color: #ffffff;
-}
-
-.btn-primary:hover {
-  background-color: #16a34a;
 }
 
 .editor-body {
@@ -1827,4 +1716,3 @@ code {
   transform: translateY(-4px);
 }
 </style>
-

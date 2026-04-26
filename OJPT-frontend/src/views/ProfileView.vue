@@ -33,7 +33,6 @@ const formData = ref({
   github: '',
   company: '',
   position: '',
-  school: '',
   bio: '',
 })
 
@@ -70,7 +69,6 @@ const loadUserInfo = async () => {
       github: data.github || '',
       company: data.company || '',
       position: data.position || '',
-      school: data.schoolId || '',
       bio: data.bio || '',
     }
 
@@ -112,7 +110,6 @@ interface FormValues {
   github?: string
   company?: string
   position?: string
-  school?: string
   bio?: string
 }
 
@@ -133,10 +130,6 @@ const onSubmit = async (values: FormValues) => {
       company: normalizeValue(values.company ?? formData.value.company),
       position: normalizeValue(values.position ?? formData.value.position),
       // 学校字段转换为 schoolId（字符串），允许为空
-      schoolId: (() => {
-        const school = values.school ?? formData.value.school
-        return school || undefined
-      })(),
       bio: normalizeValue(values.bio ?? formData.value.bio),
     }
 
@@ -924,4 +917,3 @@ onMounted(() => {
   }
 }
 </style>
-

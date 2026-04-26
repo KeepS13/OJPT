@@ -43,7 +43,6 @@ public class ProblemServiceImpl implements ProblemService {
     private final ProblemTagMapper problemTagMapper;
     private final UserProblemProgressMapper userProblemProgressMapper;
 
-    @Override
     @Transactional
     public ProblemSimpleVO createDraft(Long userId, ProblemCreateDTO dto) {
         if (userId == null) {
@@ -516,4 +515,3 @@ public class ProblemServiceImpl implements ProblemService {
                 .toList();
     }
 }
-

@@ -5,9 +5,6 @@ import { ElMenu, ElMenuItem, ElContainer, ElAside, ElMain, ElHeader } from 'elem
 import {
   DataAnalysis,
   User,
-  Key,
-  Lock,
-  School,
   Collection,
 } from '@element-plus/icons-vue'
 
@@ -21,9 +18,6 @@ const activeMenu = ref(route.path)
 const menuItems = [
   { path: '/admin', icon: DataAnalysis, title: '数据概览' },
   { path: '/admin/users', icon: User, title: '用户管理' },
-  { path: '/admin/roles', icon: Key, title: '角色管理' },
-  { path: '/admin/permissions', icon: Lock, title: '权限管理' },
-  { path: '/admin/schools', icon: School, title: '学校管理' },
   { path: '/admin/problems', icon: Collection, title: '题库管理' },
 ]
 

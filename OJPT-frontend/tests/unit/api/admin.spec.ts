@@ -20,11 +20,8 @@ vi.mock('@/api/request', () => ({
 import {
   getUserList,
   updateUserStatus,
-  getSchoolList,
-  updateSchoolStatus,
   getPlatformStatisticsOverview,
   getUserStatistics,
-  getSchoolStatistics,
 } from '../../../src/api/admin'
 
 describe('admin api', () => {
@@ -56,34 +53,13 @@ describe('admin api', () => {
     expect(putMock).toHaveBeenCalledWith(`/admin/users/${userId}/status`, payload)
   })
 
-  it('getSchoolList 应该向 /admin/schools 发送 GET 请求并携带查询参数', async () => {
-    const params = { page: 1, size: 10, status: 2 }
-    getMock.mockResolvedValue({ data: {} })
-
-    await getSchoolList(params)
-
-    expect(getMock).toHaveBeenCalledWith('/admin/schools', { params })
-  })
-
-  it('updateSchoolStatus 应该向 /admin/schools/{id}/status 发送 PUT 请求', async () => {
-    putMock.mockResolvedValue({ data: {} })
-    const schoolId = '5'
-    const payload = { status: 1 }
-
-    await updateSchoolStatus(schoolId, payload)
-
-    expect(putMock).toHaveBeenCalledWith(`/admin/schools/${schoolId}/status`, payload)
-  })
-
   it('统计相关接口应调用 /admin/statistics/* 路径', async () => {
     getMock.mockResolvedValue({ data: {} })
 
     await getPlatformStatisticsOverview()
     await getUserStatistics()
-    await getSchoolStatistics()
 
     expect(getMock).toHaveBeenCalledWith('/admin/statistics/overview')
     expect(getMock).toHaveBeenCalledWith('/admin/statistics/users')
-    expect(getMock).toHaveBeenCalledWith('/admin/statistics/schools')
   })
 })

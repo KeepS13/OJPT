@@ -20,15 +20,11 @@ const displayName = computed(() => {
   return user.value?.username || user.value?.email || ''
 })
 
-const userRoles = computed(() => user.value?.roles ?? [])
-
 const roleDisplay = computed(() => {
   const code = user.value?.roleType
   if (!code) return null
   const map: Record<string, { tag: string }> = {
-    USER: { tag: '学员' },
-    TEACHER: { tag: '教师' },
-    SCHOOL: { tag: '校方' },
+    USER: { tag: '用户' },
     ADMIN: { tag: '管理员' },
   }
   return map[code] ?? { tag: code }
@@ -70,8 +66,6 @@ const handleLogout = () => {
 
     <nav class="nav-center">
       <RouterLink to="/problemset">题库</RouterLink>
-      <RouterLink to="/contests">竞赛</RouterLink>
-      <RouterLink to="/discuss">讨论</RouterLink>
     </nav>
 
     <div class="nav-right">
@@ -111,28 +105,7 @@ const handleLogout = () => {
             <div class="user-menu__body">
               <RouterLink to="/profile" class="user-menu__item">个人中心</RouterLink>
               <RouterLink
-                v-if="userRoles.includes('STUDENT')"
-                to="/student"
-                class="user-menu__item"
-              >
-                学员中心
-              </RouterLink>
-              <RouterLink
-                v-if="userRoles.includes('TEACHER')"
-                to="/teacher"
-                class="user-menu__item"
-              >
-                教师后台
-              </RouterLink>
-              <RouterLink
-                v-if="userRoles.includes('SCHOOL')"
-                to="/school"
-                class="user-menu__item"
-              >
-                校方管理
-              </RouterLink>
-              <RouterLink
-                v-if="userRoles.includes('ADMIN')"
+                v-if="user?.roles?.includes('ADMIN')"
                 to="/admin"
                 class="user-menu__item"
               >
@@ -307,18 +280,6 @@ const handleLogout = () => {
   background: linear-gradient(135deg, #60a5fa, #3b82f6);
 }
 
-.role-badge--student {
-  background: linear-gradient(135deg, #818cf8, #6366f1);
-}
-
-.role-badge--teacher {
-  background: linear-gradient(135deg, #34d399, #059669);
-}
-
-.role-badge--school {
-  background: linear-gradient(135deg, #fbbf24, #f59e0b);
-}
-
 .role-badge--admin {
   background: linear-gradient(135deg, #fb7185, #ef4444);
 }
@@ -385,5 +346,4 @@ const handleLogout = () => {
   }
 }
 </style>
-
 

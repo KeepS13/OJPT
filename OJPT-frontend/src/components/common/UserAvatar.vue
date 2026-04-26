@@ -11,11 +11,20 @@ const props = withDefaults(
   {
     size: 32,
     avatar: null,
-  }
+  },
 )
 
+const roleLabelMap: Record<string, string> = {
+  USER: '用户',
+  ADMIN: '管理',
+}
+
+const roleGradientMap: Record<string, string> = {
+  USER: 'linear-gradient(135deg, #60a5fa, #3b82f6)',
+  ADMIN: 'linear-gradient(135deg, #fb7185, #ef4444)',
+}
+
 const initials = computed(() => {
-  // 优先检查用户名：如果是两个字的汉字，直接使用
   const raw = (props.name || '').trim()
   if (raw) {
     const noSpace = raw.replace(/\s+/g, '')
@@ -23,53 +32,28 @@ const initials = computed(() => {
     if (isChineseOnly && noSpace.length === 2) {
       return noSpace
     }
-  }
-
-  // 其次根据 roleType 显示
-  if (props.roleType) {
-    const roleMap: Record<string, string> = {
-      USER: '用户',
-      TEACHER: '教师',
-      SCHOOL: '校方',
-      ADMIN: '管理',
+    if (isChineseOnly) {
+      return noSpace.slice(-2)
     }
-    return roleMap[props.roleType] || '用户'
   }
 
-  // 最后根据名字生成（原有逻辑）
-  if (!raw) return '用户'
-  const noSpace = raw.replace(/\s+/g, '')
-  const isChineseOnly = /^[\u4e00-\u9fa5]+$/.test(noSpace)
-  if (isChineseOnly) {
-    if (noSpace.length <= 2) return noSpace
-    return noSpace.slice(-2)
+  if (props.roleType) {
+    return roleLabelMap[props.roleType] || '用户'
   }
+
   return '用户'
 })
 
-// 头像地址：优先使用后端返回的 avatar，如果是相对路径则补全为完整 URL
 const avatarUrl = computed(() => {
   if (!props.avatar) return null
-  const path = props.avatar
-  if (!path) return null
-  return path.startsWith('http') ? path : `http://localhost${path}`
+  return props.avatar.startsWith('http') ? props.avatar : `http://localhost${props.avatar}`
 })
 
-// 根据角色类型返回对应的渐变色
 const avatarGradient = computed(() => {
   if (!props.roleType) {
-    // 默认紫色渐变（原有颜色）
-    return 'linear-gradient(135deg, #8E55EF, #E59CE7)'
+    return 'linear-gradient(135deg, #60a5fa, #3b82f6)'
   }
-
-  const roleGradients: Record<string, string> = {
-    USER: 'linear-gradient(135deg, #60a5fa, #3b82f6)', // 蓝色渐变
-    TEACHER: 'linear-gradient(135deg, #34d399, #059669)', // 绿色渐变
-    SCHOOL: 'linear-gradient(135deg, #fbbf24, #f59e0b)', // 黄色/橙色渐变
-    ADMIN: 'linear-gradient(135deg, #fb7185, #ef4444)', // 红色渐变
-  }
-
-  return roleGradients[props.roleType] || 'linear-gradient(135deg, #8E55EF, #E59CE7)'
+  return roleGradientMap[props.roleType] || 'linear-gradient(135deg, #60a5fa, #3b82f6)'
 })
 
 const styleVars = computed(() => ({
@@ -116,5 +100,3 @@ const styleVars = computed(() => ({
   user-select: none;
 }
 </style>
-
-
