@@ -6,6 +6,7 @@ import com.example.ojpt.entity.Submission;
 import com.example.ojpt.judge.CodeExecutionService;
 import com.example.ojpt.mapper.ProblemMapper;
 import com.example.ojpt.mapper.ProblemTestCaseMapper;
+import com.example.ojpt.mapper.SubmissionCaseResultMapper;
 import com.example.ojpt.mapper.SubmissionMapper;
 import com.example.ojpt.mapper.UserProblemProgressMapper;
 import com.example.ojpt.service.impl.SubmissionServiceImpl;
@@ -36,6 +37,7 @@ class SubmissionServiceImplTest {
                 problemMapper,
                 userProblemProgressMapper,
                 judgeCaseMapper,
+                mock(SubmissionCaseResultMapper.class),
                 codeExecutionService
         );
 
@@ -88,6 +90,7 @@ class SubmissionServiceImplTest {
                 problemMapper,
                 userProblemProgressMapper,
                 judgeCaseMapper,
+                mock(SubmissionCaseResultMapper.class),
                 codeExecutionService
         );
 

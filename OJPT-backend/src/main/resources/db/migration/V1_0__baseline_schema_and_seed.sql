@@ -1,0 +1,1913 @@
+-- Consolidated baseline migration for a freshly recreated OJPT database.
+-- Source migrations are merged below in Flyway version order.
+
+-- ============================================================================
+-- Source: V1_0__init_user.sql
+-- ============================================================================
+
+-- 用户与组织域初始化 - 仅表结构
+CREATE TABLE IF NOT EXISTS `user` (
+    `id` BIGINT UNSIGNED NOT NULL COMMENT '主键',
+    `username` VARCHAR(64) NOT NULL COMMENT '登录名',
+    `password` VARCHAR(255) NOT NULL COMMENT 'BCrypt 加密密码',
+    `email` VARCHAR(128) DEFAULT NULL,
+    `phone` VARCHAR(32) DEFAULT NULL,
+    `status` TINYINT NOT NULL DEFAULT 1 COMMENT '0禁用/1启用/2待审核',
+    `last_login_at` DATETIME DEFAULT NULL COMMENT '最近登录时间',
+    `avatar` VARCHAR(255) DEFAULT NULL COMMENT '头像',
+    `role_type` ENUM('USER','STUDENT','TEACHER','SCHOOL','ADMIN') NOT NULL DEFAULT 'USER',
+    `is_deleted` TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除标记 0 正常/1 删除',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `created_by` BIGINT DEFAULT NULL COMMENT '创建人',
+    `updated_by` BIGINT DEFAULT NULL COMMENT '更新人',
+    PRIMARY KEY (`id`),
+    KEY `idx_username` (`username`),
+    UNIQUE KEY `uk_email` (`email`),
+    UNIQUE KEY `uk_phone` (`phone`),
+    KEY `idx_user_status` (`status`),
+    KEY `idx_user_role_type` (`role_type`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表';
+
+-- 角色表
+CREATE TABLE IF NOT EXISTS `role` (
+    `id` BIGINT UNSIGNED NOT NULL COMMENT '主键',
+    `code` VARCHAR(64) NOT NULL COMMENT '角色编码，唯一',
+    `name` VARCHAR(128) NOT NULL COMMENT '角色名称',
+    `description` VARCHAR(255) DEFAULT NULL COMMENT '描述',
+    `level` INT DEFAULT 0 COMMENT '角色层级/优先级',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_role_code` (`code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='角色定义';
+
+-- 用户-角色关系表
+-- 外键说明：user_role.user_id -> user.id；user_role.role_id -> role.id
+CREATE TABLE IF NOT EXISTS `user_role` (
+    `id` BIGINT UNSIGNED NOT NULL COMMENT '主键',
+    `user_id` BIGINT UNSIGNED NOT NULL COMMENT '用户ID',
+    `role_id` BIGINT UNSIGNED NOT NULL COMMENT '角色ID',
+    `bind_source` VARCHAR(64) DEFAULT NULL COMMENT '绑定来源（手动/导入/系统）',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_user_role` (`user_id`,`role_id`),
+    KEY `idx_user_role_role` (`role_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户与角色多对多关系';
+
+-- 权限表
+CREATE TABLE IF NOT EXISTS `permission` (
+    `id` BIGINT UNSIGNED NOT NULL COMMENT '主键',
+    `resource` VARCHAR(128) NOT NULL COMMENT '资源标识（接口/菜单/数据）',
+    `action` VARCHAR(64) NOT NULL COMMENT '操作动作（GET/POST/DELETE... 或自定义）',
+    `condition_json` JSON DEFAULT NULL COMMENT 'ABAC 条件，JSON 表达式',
+    `description` VARCHAR(255) DEFAULT NULL COMMENT '描述',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_permission_resource_action` (`resource`,`action`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='细粒度权限表';
+
+-- 角色-权限关联
+-- 外键说明：role_permission.role_id -> role.id；role_permission.permission_id -> permission.id
+CREATE TABLE IF NOT EXISTS `role_permission` (
+    `id` BIGINT UNSIGNED NOT NULL COMMENT '主键',
+    `role_id` BIGINT UNSIGNED NOT NULL COMMENT '角色ID',
+    `permission_id` BIGINT UNSIGNED NOT NULL COMMENT '权限ID',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_role_permission` (`role_id`,`permission_id`),
+    KEY `idx_role_permission_role` (`role_id`),
+    KEY `idx_role_permission_perm` (`permission_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='角色与权限关系';
+
+-- 用户扩展信息表
+-- 外键说明：user_profile.user_id -> user.id（唯一约束保持 1:1）
+CREATE TABLE IF NOT EXISTS `user_profile` (
+    `id` BIGINT UNSIGNED NOT NULL COMMENT '主键',
+    `user_id` BIGINT UNSIGNED NOT NULL COMMENT '用户ID',
+    `gender` TINYINT DEFAULT 0 COMMENT '性别：0未知/1男/2女',
+    `birthday` DATE DEFAULT NULL COMMENT '生日',
+    `address` VARCHAR(255) DEFAULT NULL COMMENT '现住址',
+    `website` VARCHAR(255) DEFAULT NULL COMMENT '个人网站（博客或作品集等）',
+    `github` VARCHAR(128) DEFAULT NULL COMMENT 'GitHub 用户名或链接',
+    `company` VARCHAR(128) DEFAULT NULL COMMENT '所在公司',
+    `position` VARCHAR(128) DEFAULT NULL COMMENT '职位',
+    `skills` TEXT DEFAULT NULL COMMENT '技能（逗号分隔或 JSON）',
+    `student_no` VARCHAR(64) DEFAULT NULL COMMENT '学号/工号',
+    `school_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '学校ID',
+    `bio` VARCHAR(255) DEFAULT NULL COMMENT '简介',
+    `tags` VARCHAR(255) DEFAULT NULL COMMENT '标签，逗号分隔或 JSON',
+    `identity_status` TINYINT DEFAULT 0 COMMENT '实名/资质状态',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_user_profile_user` (`user_id`),
+    KEY `idx_user_profile_school_id` (`school_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户扩展信息';
+
+-- 学校
+CREATE TABLE IF NOT EXISTS `school` (
+    `id` BIGINT UNSIGNED NOT NULL COMMENT '主键',
+    `name` VARCHAR(255) NOT NULL COMMENT '学校名称',
+    `contact` VARCHAR(128) DEFAULT NULL COMMENT '联系人/电话',
+    `status` TINYINT NOT NULL DEFAULT 1 COMMENT '状态：1启用/0禁用/2待认证',
+    `certified_at` DATETIME DEFAULT NULL COMMENT '认证时间',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_school_status` (`status`),
+    KEY `idx_school_name` (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='学校主体';
+
+-- 院系/训练营
+-- 外键说明：department.school_id -> school.id
+CREATE TABLE IF NOT EXISTS `department` (
+    `id` BIGINT UNSIGNED NOT NULL COMMENT '主键',
+    `school_id` BIGINT UNSIGNED NOT NULL COMMENT '学校ID',
+    `name` VARCHAR(128) NOT NULL COMMENT '名称',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_department_school` (`school_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='院系/训练营';
+
+-- 班级/小组
+-- 外键说明：class.department_id -> department.id；class.teacher_id -> user.id（教师）
+CREATE TABLE IF NOT EXISTS `class` (
+    `id` BIGINT UNSIGNED NOT NULL COMMENT '主键',
+    `department_id` BIGINT UNSIGNED NOT NULL COMMENT '院系ID',
+    `name` VARCHAR(128) NOT NULL COMMENT '班级名称',
+    `year` VARCHAR(16) DEFAULT NULL COMMENT '届/年份',
+    `teacher_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '班主任/负责人',
+    `merk` VARCHAR(32) DEFAULT NULL COMMENT '班级/小组类型/简介',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_class_department` (`department_id`),
+    KEY `idx_class_teacher_id` (`teacher_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='班级/小组';
+
+-- 学员加入班级关系
+-- 外键说明：class_user.class_id -> class.id；class_user.user_id -> user.id（学员）；class_user.reviewer_id -> user.id（审核人）
+CREATE TABLE IF NOT EXISTS `class_user` (
+    `id` BIGINT UNSIGNED NOT NULL COMMENT '主键',
+    `class_id` BIGINT UNSIGNED NOT NULL COMMENT '班级ID',
+    `user_id` BIGINT UNSIGNED NOT NULL COMMENT '学员ID',
+    `join_type` ENUM('INVITE','APPLY') DEFAULT NULL COMMENT '加入方式：INVITE 邀请 / APPLY 申请',
+    `join_status` ENUM('PENDING','APPROVED','REJECTED') NOT NULL DEFAULT 'PENDING' COMMENT '申请/邀请状态：PENDING 待审核/APPROVED 同意/REJECTED 拒绝',
+    `join_at` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '加入时间（通过时记录）',
+    `reviewer_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '审核人/操作人',
+    `review_at` DATETIME DEFAULT NULL COMMENT '审核时间',
+    `review_comment` VARCHAR(255) DEFAULT NULL COMMENT '审核备注',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_class_user` (`class_id`,`user_id`),
+    KEY `idx_class_user_class_status` (`class_id`,`join_status`),
+    KEY `idx_class_user_user_status` (`user_id`,`join_status`),
+    KEY `idx_class_user_reviewer` (`reviewer_id`),
+    CONSTRAINT `fk_class_user_reviewer` FOREIGN KEY (`reviewer_id`) REFERENCES `user` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='班级-学员关系';
+
+-- 班级与教师关系
+-- 外键说明：class_teacher.class_id -> class.id；class_teacher.teacher_id -> user.id（教师/助教）
+CREATE TABLE IF NOT EXISTS `class_teacher` (
+    `id` BIGINT UNSIGNED NOT NULL COMMENT '主键',
+    `class_id` BIGINT UNSIGNED NOT NULL COMMENT '班级ID',
+    `teacher_id` BIGINT UNSIGNED NOT NULL COMMENT '教师ID',
+    `role` VARCHAR(32) DEFAULT NULL COMMENT '角色：班主任/助教等',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_class_teacher` (`class_id`,`teacher_id`),
+    KEY `idx_class_teacher_class` (`class_id`),
+    KEY `idx_class_teacher_teacher` (`teacher_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='班级-教师关系';
+
+
+-- ============================================================================
+-- Source: V1_1__init_user_data.sql
+-- ============================================================================
+
+-- 用户与组织域初始化 - 基础数据与测试数据
+
+-- 角色表初始化数据（基础五类角色）
+INSERT INTO `role` (`id`, `code`, `name`, `description`, `level`)
+VALUES
+    (1000000000000000100, 'USER', '用户', '基础用户', 100),
+    (1000000000000000101, 'STUDENT', '学员', '普通学员', 200),
+    (1000000000000000102, 'TEACHER', '教师', '授课/出题教师', 300),
+    (1000000000000000103, 'SCHOOL', '校方', '校方管理/运营', 400),
+    (1000000000000000104, 'ADMIN', '管理员', '平台超级管理员', 500);
+
+-- 初始管理员与测试账号
+INSERT INTO `user`
+(`id`, `username`, `email`, `password`, `status`, `role_type`, `is_deleted`, `created_at`, `updated_at`, `created_by`, `updated_by`)
+VALUES
+(1998338632572506113, 'admin', 'admin@qq.com', '$2a$10$gZZ88Afdd4RAIp/XU8xBZuE7xOquiUhkJ7bnJLSjDKoBXBszFk/Pq', 1, 'ADMIN', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0, 0),
+-- 多角色测试账号（admin 有 4 个权限，school 有 3 个，teacher 有 2 个，user 有 1 个）
+(1998338632572506114, 'test_admin', 'test_admin@qq.com', '$2a$10$gZZ88Afdd4RAIp/XU8xBZuE7xOquiUhkJ7bnJLSjDKoBXBszFk/Pq', 1, 'ADMIN', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0, 0),
+(1998338632572506115, 'test_school', 'test_school@qq.com', '$2a$10$gZZ88Afdd4RAIp/XU8xBZuE7xOquiUhkJ7bnJLSjDKoBXBszFk/Pq', 1, 'SCHOOL', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0, 0),
+(1998338632572506116, 'test_teacher', 'test_teacher@qq.com', '$2a$10$gZZ88Afdd4RAIp/XU8xBZuE7xOquiUhkJ7bnJLSjDKoBXBszFk/Pq', 1, 'TEACHER', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0, 0),
+(1998338632572506117, 'test_user', 'test_user@qq.com', '$2a$10$gZZ88Afdd4RAIp/XU8xBZuE7xOquiUhkJ7bnJLSjDKoBXBszFk/Pq', 1, 'STUDENT', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0, 0),
+-- 只拥有对应单一权限的用户
+(1998338632572506118, 'only_admin', 'only_admin@qq.com', '$2a$10$gZZ88Afdd4RAIp/XU8xBZuE7xOquiUhkJ7bnJLSjDKoBXBszFk/Pq', 1, 'ADMIN', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0, 0),
+(1998338632572506119, 'only_school', 'only_school@qq.com', '$2a$10$gZZ88Afdd4RAIp/XU8xBZuE7xOquiUhkJ7bnJLSjDKoBXBszFk/Pq', 1, 'SCHOOL', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0, 0),
+(1998338632572506120, 'only_teacher', 'only_teacher@qq.com', '$2a$10$gZZ88Afdd4RAIp/XU8xBZuE7xOquiUhkJ7bnJLSjDKoBXBszFk/Pq', 1, 'TEACHER', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0, 0),
+(1998338632572506121, 'only_user', 'only_user@qq.com', '$2a$10$gZZ88Afdd4RAIp/XU8xBZuE7xOquiUhkJ7bnJLSjDKoBXBszFk/Pq', 1, 'STUDENT', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0, 0),
+-- 新增学员样本（含禁用/待审核状态）
+(1998338632572506137, 'stu_alpha', 'alpha@example.com', '$2a$10$gZZ88Afdd4RAIp/XU8xBZuE7xOquiUhkJ7bnJLSjDKoBXBszFk/Pq', 1, 'STUDENT', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0, 0),
+(1998338632572506138, 'stu_beta', 'beta@example.com', '$2a$10$gZZ88Afdd4RAIp/XU8xBZuE7xOquiUhkJ7bnJLSjDKoBXBszFk/Pq', 1, 'STUDENT', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0, 0),
+(1998338632572506139, 'stu_gamma', 'gamma@example.com', '$2a$10$gZZ88Afdd4RAIp/XU8xBZuE7xOquiUhkJ7bnJLSjDKoBXBszFk/Pq', 1, 'STUDENT', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0, 0),
+(1998338632572506140, 'stu_pending', 'pending@example.com', '$2a$10$gZZ88Afdd4RAIp/XU8xBZuE7xOquiUhkJ7bnJLSjDKoBXBszFk/Pq', 2, 'USER', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0, 0),
+(1998338632572506141, 'stu_banned', 'banned@example.com', '$2a$10$gZZ88Afdd4RAIp/XU8xBZuE7xOquiUhkJ7bnJLSjDKoBXBszFk/Pq', 0, 'USER', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0, 0);
+
+-- 绑定用户角色（所有用户都有 USER 基础角色，已加入班级的用户有 STUDENT 角色）
+INSERT INTO `user_role` (`id`, `user_id`, `role_id`, `bind_source`, `created_at`, `updated_at`)
+VALUES
+    -- admin：ADMIN + USER
+    (1998338632572506122, 1998338632572506113, 1000000000000000104, 'SYSTEM_INIT', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572506142, 1998338632572506113, 1000000000000000100, 'SYSTEM_INIT', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    -- test_admin：ADMIN + SCHOOL + TEACHER + USER（4 个权限，未加入班级，无 STUDENT）
+    (1998338632572506123, 1998338632572506114, 1000000000000000104, 'SYSTEM_INIT', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572506124, 1998338632572506114, 1000000000000000103, 'SYSTEM_INIT', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572506125, 1998338632572506114, 1000000000000000102, 'SYSTEM_INIT', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572506143, 1998338632572506114, 1000000000000000100, 'SYSTEM_INIT', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    -- test_school：SCHOOL + TEACHER + USER（3 个权限，未加入班级，无 STUDENT）
+    (1998338632572506127, 1998338632572506115, 1000000000000000103, 'SYSTEM_INIT', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572506128, 1998338632572506115, 1000000000000000102, 'SYSTEM_INIT', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572506144, 1998338632572506115, 1000000000000000100, 'SYSTEM_INIT', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    -- test_teacher：TEACHER + USER（2 个权限，未加入班级，无 STUDENT）
+    (1998338632572506130, 1998338632572506116, 1000000000000000102, 'SYSTEM_INIT', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572506145, 1998338632572506116, 1000000000000000100, 'SYSTEM_INIT', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    -- test_user：USER + STUDENT（已加入班级）
+    (1998338632572506146, 1998338632572506117, 1000000000000000100, 'SYSTEM_INIT', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572506132, 1998338632572506117, 1000000000000000101, 'SYSTEM_INIT', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    -- 只拥有单一权限的 4 个用户
+    (1998338632572506133, 1998338632572506118, 1000000000000000104, 'SYSTEM_INIT', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572506147, 1998338632572506118, 1000000000000000100, 'SYSTEM_INIT', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572506134, 1998338632572506119, 1000000000000000103, 'SYSTEM_INIT', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572506148, 1998338632572506119, 1000000000000000100, 'SYSTEM_INIT', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572506135, 1998338632572506120, 1000000000000000102, 'SYSTEM_INIT', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572506149, 1998338632572506120, 1000000000000000100, 'SYSTEM_INIT', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    -- only_user：USER + STUDENT（已加入班级）
+    (1998338632572506150, 1998338632572506121, 1000000000000000100, 'SYSTEM_INIT', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572506136, 1998338632572506121, 1000000000000000101, 'SYSTEM_INIT', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    -- 新增学员角色绑定（已加入班级的有 STUDENT，未加入的只有 USER）
+    -- stu_alpha：USER + STUDENT（已加入班级）
+    (1998338632572506151, 1998338632572506137, 1000000000000000100, 'SYSTEM_INIT', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572506156, 1998338632572506137, 1000000000000000101, 'SYSTEM_INIT', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    -- stu_beta：USER + STUDENT（已加入班级）
+    (1998338632572506152, 1998338632572506138, 1000000000000000100, 'SYSTEM_INIT', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572506157, 1998338632572506138, 1000000000000000101, 'SYSTEM_INIT', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    -- stu_gamma：USER + STUDENT（已加入班级）
+    (1998338632572506153, 1998338632572506139, 1000000000000000100, 'SYSTEM_INIT', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572506158, 1998338632572506139, 1000000000000000101, 'SYSTEM_INIT', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    -- stu_pending：仅 USER（未加入班级，只有待审核申请）
+    (1998338632572506154, 1998338632572506140, 1000000000000000100, 'SYSTEM_INIT', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    -- stu_banned：仅 USER（未加入班级）
+    (1998338632572506155, 1998338632572506141, 1000000000000000100, 'SYSTEM_INIT', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+-- 用户扩展信息表初始化数据（为初始化的 9 个用户预留 profile 记录）
+INSERT INTO `user_profile`
+(`id`, `user_id`, `identity_status`, `created_at`, `updated_at`)
+VALUES
+(1998338632572506200, 1998338632572506113, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP), -- admin（平台管理员）
+(1998338632572506201, 1998338632572506114, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP), -- test_admin
+(1998338632572506202, 1998338632572506115, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP), -- test_school
+(1998338632572506203, 1998338632572506116, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP), -- test_teacher
+(1998338632572506204, 1998338632572506117, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP), -- test_user
+(1998338632572506205, 1998338632572506118, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP), -- only_admin
+(1998338632572506206, 1998338632572506119, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP), -- only_school
+(1998338632572506207, 1998338632572506120, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP), -- only_teacher
+(1998338632572506208, 1998338632572506121, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP), -- only_user
+-- 新增学员 profile 预留并关联学校
+(1998338632572506209, 1998338632572506137, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(1998338632572506210, 1998338632572506138, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(1998338632572506211, 1998338632572506139, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(1998338632572506212, 1998338632572506140, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(1998338632572506213, 1998338632572506141, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+-- 学校初始化数据
+INSERT INTO `school` (`id`, `name`, `contact`, `status`, `certified_at`, `created_at`, `updated_at`)
+VALUES
+    (1998338632572507001, '清华大学', '010-62785001', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP), -- 已认证
+    (1998338632572507002, '北京大学', '010-62751234', 2, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP), -- 待认证
+    (1998338632572507003, '北京理工大学', '010-68912345', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP), -- 已认证
+    (1998338632572507004, '浙江大学', '0571-87951111', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572507005, '上海交通大学', '021-62821000', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572507006, '复旦大学', '021-65642222', 2, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP); -- 待认证
+
+-- 院系初始化数据
+INSERT INTO `department` (`id`, `school_id`, `name`, `created_at`, `updated_at`)
+VALUES
+    -- 清华大学的院系
+    (1998338632572507101, 1998338632572507001, '计算机科学与技术系', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572507102, 1998338632572507001, '软件学院', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572507103, 1998338632572507001, '数学系', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    -- 北京大学的院系
+    (1998338632572507104, 1998338632572507002, '信息科学技术学院', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572507105, 1998338632572507002, '工学院', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    -- 北京理工大学的院系
+    (1998338632572507106, 1998338632572507003, '计算机学院', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    -- 浙江大学
+    (1998338632572507107, 1998338632572507004, '计算机科学与技术学院', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572507108, 1998338632572507004, '人工智能学院', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    -- 上海交通大学
+    (1998338632572507109, 1998338632572507005, '电子信息与电气工程学院', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572507110, 1998338632572507005, '软件学院', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    -- 复旦大学
+    (1998338632572507111, 1998338632572507006, '计算机科学技术学院', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572507112, 1998338632572507006, '数据科学与大数据技术学院', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+-- 班级初始化数据
+INSERT INTO `class` (`id`, `department_id`, `name`, `year`, `teacher_id`, `merk`, `created_at`, `updated_at`)
+VALUES
+    -- 清华大学的班级
+    (1998338632572507201, 1998338632572507101, '2024级1班', '2024', 1998338632572506116, '算法训练班', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP), -- test_teacher 是班主任
+    (1998338632572507202, 1998338632572507101, '2024级2班', '2024', 1998338632572506120, '数据结构训练班', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP), -- only_teacher 是班主任
+    (1998338632572507203, 1998338632572507102, '2023级1班', '2023', 1998338632572506116, '软件工程实践', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    -- 北京大学的班级
+    (1998338632572507204, 1998338632572507104, '2024级1班', '2024', NULL, '编程基础班', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP), -- 暂无班主任
+    -- 北京理工大学的班级
+    (1998338632572507205, 1998338632572507106, '2024级1班', '2024', 1998338632572506120, '计算机基础', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    -- 浙江大学
+    (1998338632572507206, 1998338632572507107, '2024级CS1班', '2024', 1998338632572506116, '算法强化', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572507207, 1998338632572507107, '2024级CS2班', '2024', 1998338632572506120, '系统设计', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572507208, 1998338632572507108, '2023级AI1班', '2023', NULL, 'AI基础', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572507209, 1998338632572507108, '2023级AI2班', '2023', 1998338632572506116, 'AI实践', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    -- 上海交通大学
+    (1998338632572507210, 1998338632572507109, '2024级EE1班', '2024', 1998338632572506120, '嵌入式', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572507211, 1998338632572507109, '2024级EE2班', '2024', NULL, '信号处理', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572507212, 1998338632572507110, '2023级SE1班', '2023', 1998338632572506116, '微服务', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572507213, 1998338632572507110, '2023级SE2班', '2023', 1998338632572506120, '云原生', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    -- 复旦大学
+    (1998338632572507214, 1998338632572507111, '2024级CSX1班', '2024', 1998338632572506116, '编译原理', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572507215, 1998338632572507111, '2024级CSX2班', '2024', NULL, '安全基础', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572507216, 1998338632572507112, '2023级DS1班', '2023', 1998338632572506120, '数据挖掘', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572507217, 1998338632572507112, '2023级DS2班', '2023', 1998338632572506116, '统计学习', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+-- 更新用户扩展信息，关联学校
+UPDATE `user_profile` SET `school_id` = 1998338632572507001 WHERE `user_id` = 1998338632572506115; -- test_school 关联清华大学
+UPDATE `user_profile` SET `school_id` = 1998338632572507002 WHERE `user_id` = 1998338632572506119; -- only_school 关联北京大学
+UPDATE `user_profile` SET `school_id` = 1998338632572507001, `student_no` = '2024001' WHERE `user_id` = 1998338632572506117; -- test_user 关联清华大学，设置学号
+UPDATE `user_profile` SET `school_id` = 1998338632572507001, `student_no` = '2024002' WHERE `user_id` = 1998338632572506121; -- only_user 关联清华大学，设置学号
+UPDATE `user_profile` SET `school_id` = 1998338632572507004, `student_no` = '2024003' WHERE `user_id` = 1998338632572506137; -- stu_alpha -> 浙江大学
+UPDATE `user_profile` SET `school_id` = 1998338632572507005, `student_no` = '2024004' WHERE `user_id` = 1998338632572506138; -- stu_beta -> 上海交通大学
+UPDATE `user_profile` SET `school_id` = 1998338632572507006, `student_no` = '2024005' WHERE `user_id` = 1998338632572506139; -- stu_gamma -> 复旦大学
+UPDATE `user_profile` SET `school_id` = 1998338632572507005, `student_no` = '2024006' WHERE `user_id` = 1998338632572506140; -- stu_pending -> 上交
+UPDATE `user_profile` SET `school_id` = 1998338632572507004, `student_no` = '2024007' WHERE `user_id` = 1998338632572506141; -- stu_banned -> 浙大
+
+-- 班级学员关系初始化数据（class_user）
+INSERT INTO `class_user` (`id`, `class_id`, `user_id`, `join_type`, `join_status`, `join_at`, `reviewer_id`, `review_at`, `review_comment`)
+VALUES
+    -- test_user 的班级关系
+    (1998338632572507301, 1998338632572507201, 1998338632572506117, 'APPLY', 'APPROVED', CURRENT_TIMESTAMP, 1998338632572506116, CURRENT_TIMESTAMP, '审核通过'),
+    (1998338632572507302, 1998338632572507203, 1998338632572506117, 'APPLY', 'APPROVED', CURRENT_TIMESTAMP, 1998338632572506116, CURRENT_TIMESTAMP, NULL),
+    (1998338632572507303, 1998338632572507202, 1998338632572506117, 'APPLY', 'PENDING', NULL, NULL, NULL, NULL), -- 待审核
+    -- only_user 的班级关系
+    (1998338632572507304, 1998338632572507201, 1998338632572506121, 'INVITE', 'APPROVED', CURRENT_TIMESTAMP, 1998338632572506116, CURRENT_TIMESTAMP, '邀请加入'),
+    (1998338632572507305, 1998338632572507202, 1998338632572506121, 'APPLY', 'REJECTED', NULL, 1998338632572506120, CURRENT_TIMESTAMP, '班级已满'),
+    (1998338632572507306, 1998338632572507204, 1998338632572506121, 'APPLY', 'PENDING', NULL, NULL, NULL, NULL), -- 待审核
+    -- 新增学员的班级关系（覆盖 PENDING/APPROVED/REJECTED）
+    (1998338632572507307, 1998338632572507206, 1998338632572506137, 'APPLY', 'APPROVED', CURRENT_TIMESTAMP, 1998338632572506116, CURRENT_TIMESTAMP, '审核通过'),
+    (1998338632572507308, 1998338632572507208, 1998338632572506137, 'APPLY', 'PENDING', NULL, NULL, NULL, NULL),
+    (1998338632572507309, 1998338632572507210, 1998338632572506138, 'INVITE', 'APPROVED', CURRENT_TIMESTAMP, 1998338632572506116, CURRENT_TIMESTAMP, '邀请加入'),
+    (1998338632572507310, 1998338632572507211, 1998338632572506138, 'APPLY', 'PENDING', NULL, NULL, NULL, NULL),
+    (1998338632572507311, 1998338632572507216, 1998338632572506139, 'APPLY', 'APPROVED', CURRENT_TIMESTAMP, 1998338632572506120, CURRENT_TIMESTAMP, '审核通过'),
+    (1998338632572507312, 1998338632572507214, 1998338632572506139, 'APPLY', 'PENDING', NULL, NULL, NULL, NULL),
+    (1998338632572507313, 1998338632572507212, 1998338632572506140, 'APPLY', 'PENDING', NULL, NULL, NULL, NULL),
+    (1998338632572507314, 1998338632572507213, 1998338632572506140, 'APPLY', 'REJECTED', NULL, 1998338632572506116, CURRENT_TIMESTAMP, '资料不足'),
+    (1998338632572507315, 1998338632572507207, 1998338632572506141, 'APPLY', 'REJECTED', NULL, 1998338632572506120, CURRENT_TIMESTAMP, '账号需复核'),
+    (1998338632572507316, 1998338632572507215, 1998338632572506141, 'APPLY', 'PENDING', NULL, NULL, NULL, NULL),
+    -- 复用已有学员补充混合场景
+    (1998338632572507317, 1998338632572507213, 1998338632572506117, 'INVITE', 'APPROVED', CURRENT_TIMESTAMP, 1998338632572506116, CURRENT_TIMESTAMP, '跨院系旁听'),
+    (1998338632572507318, 1998338632572507210, 1998338632572506121, 'APPLY', 'APPROVED', CURRENT_TIMESTAMP, 1998338632572506120, CURRENT_TIMESTAMP, '补录');
+
+-- 班级教师关系初始化数据（class_teacher）
+INSERT INTO `class_teacher` (`id`, `class_id`, `teacher_id`, `role`, `created_at`)
+VALUES
+    -- test_teacher 管理的班级（除了作为班主任的班级）
+    (1998338632572507401, 1998338632572507202, 1998338632572506116, '助教', CURRENT_TIMESTAMP), -- test_teacher 作为助教
+    (1998338632572507402, 1998338632572507205, 1998338632572506116, '任课教师', CURRENT_TIMESTAMP),
+    -- only_teacher 管理的班级
+    (1998338632572507403, 1998338632572507201, 1998338632572506120, '助教', CURRENT_TIMESTAMP), -- only_teacher 作为助教
+    (1998338632572507404, 1998338632572507203, 1998338632572506120, '任课教师', CURRENT_TIMESTAMP),
+    -- 新增班级的授课/班主任信息
+    (1998338632572507405, 1998338632572507206, 1998338632572506116, '班主任', CURRENT_TIMESTAMP),
+    (1998338632572507406, 1998338632572507207, 1998338632572506120, '班主任', CURRENT_TIMESTAMP),
+    (1998338632572507407, 1998338632572507208, 1998338632572506116, '任课教师', CURRENT_TIMESTAMP),
+    (1998338632572507408, 1998338632572507209, 1998338632572506120, '助教', CURRENT_TIMESTAMP),
+    (1998338632572507409, 1998338632572507210, 1998338632572506120, '班主任', CURRENT_TIMESTAMP),
+    (1998338632572507410, 1998338632572507212, 1998338632572506116, '班主任', CURRENT_TIMESTAMP),
+    (1998338632572507411, 1998338632572507213, 1998338632572506120, '班主任', CURRENT_TIMESTAMP),
+    (1998338632572507412, 1998338632572507214, 1998338632572506116, '班主任', CURRENT_TIMESTAMP),
+    (1998338632572507413, 1998338632572507216, 1998338632572506120, '班主任', CURRENT_TIMESTAMP);
+
+
+-- ============================================================================
+-- Source: V1_2__unify_dual_roles.sql
+-- ============================================================================
+
+INSERT INTO `role` (`id`, `code`, `name`, `description`, `level`, `created_at`, `updated_at`)
+SELECT 1000000000000000100, 'USER', '用户', '普通用户', 100, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM `role` WHERE `code` = 'USER');
+
+INSERT INTO `role` (`id`, `code`, `name`, `description`, `level`, `created_at`, `updated_at`)
+SELECT 1000000000000000104, 'ADMIN', '管理员', '平台管理员', 500, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM `role` WHERE `code` = 'ADMIN');
+
+UPDATE `user`
+SET `role_type` = CASE
+    WHEN UPPER(COALESCE(`role_type`, 'USER')) = 'ADMIN' THEN 'ADMIN'
+    ELSE 'USER'
+END;
+
+DELETE rp
+FROM `role_permission` rp
+INNER JOIN `role` r ON r.`id` = rp.`role_id`
+WHERE r.`code` NOT IN ('USER', 'ADMIN');
+
+DELETE ur
+FROM `user_role` ur
+INNER JOIN `role` r ON r.`id` = ur.`role_id`
+WHERE r.`code` NOT IN ('USER', 'ADMIN');
+
+DELETE FROM `role`
+WHERE `code` NOT IN ('USER', 'ADMIN');
+
+UPDATE `role`
+SET `name` = '用户',
+    `description` = '普通用户',
+    `level` = 100
+WHERE `code` = 'USER';
+
+UPDATE `role`
+SET `name` = '管理员',
+    `description` = '平台管理员',
+    `level` = 500
+WHERE `code` = 'ADMIN';
+
+DELETE FROM `user_role`;
+
+SET @next_user_role_id := 1998338632572508000;
+
+INSERT INTO `user_role` (`id`, `user_id`, `role_id`, `bind_source`, `created_at`, `updated_at`)
+SELECT
+    (@next_user_role_id := @next_user_role_id + 1),
+    u.`id`,
+    r.`id`,
+    'SYSTEM_DUAL_ROLE_MIGRATION',
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+FROM `user` u
+INNER JOIN `role` r ON r.`code` = u.`role_type`
+WHERE u.`is_deleted` = 0;
+
+ALTER TABLE `user`
+MODIFY COLUMN `role_type` ENUM('USER', 'ADMIN') NOT NULL DEFAULT 'USER';
+
+
+-- ============================================================================
+-- Source: V1_3__init_problem_bank.sql
+-- ============================================================================
+
+-- 题库与提交域初始化 - 表结构与基础演示数据
+
+-- 题目主表（包含 problem_no 稳定展示题号）
+CREATE TABLE IF NOT EXISTS `problem` (
+    `id`              BIGINT UNSIGNED NOT NULL COMMENT '主键，雪花 ID',
+    `problem_no`      INT UNSIGNED     NOT NULL AUTO_INCREMENT COMMENT '题目展示编号（稳定递增，从1开始）',
+    `title`           VARCHAR(255)    NOT NULL COMMENT '题目标题',
+    `difficulty`      ENUM('EASY','MEDIUM','HARD') NOT NULL DEFAULT 'EASY' COMMENT '难度',
+    `statement_md`    LONGTEXT        NOT NULL COMMENT '题面 Markdown 内容',
+    `time_limit_ms`   INT             NOT NULL DEFAULT 1000 COMMENT '时间限制（毫秒）',
+    `memory_limit_kb` INT             NOT NULL DEFAULT 256000 COMMENT '内存限制（KB）',
+    `status`          ENUM('DRAFT','PUBLISHED','ARCHIVED') NOT NULL DEFAULT 'DRAFT' COMMENT '题目状态：草稿/已发布/已归档',
+    `submit_count`    BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '提交总次数（可选统计字段）',
+    `accepted_count`  BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '通过次数（可选统计字段）',
+    `is_deleted`      TINYINT         NOT NULL DEFAULT 0 COMMENT '逻辑删除标记 0 正常/1 删除',
+    `created_at`      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at`      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `created_by`      BIGINT UNSIGNED          DEFAULT NULL COMMENT '创建人',
+    `updated_by`      BIGINT UNSIGNED          DEFAULT NULL COMMENT '更新人',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_problem_no` (`problem_no`),
+    KEY `idx_problem_status_difficulty` (`status`,`difficulty`),
+    KEY `idx_problem_title` (`title`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='题目主表';
+
+CREATE TABLE IF NOT EXISTS `tag` (
+    `id`        BIGINT UNSIGNED NOT NULL COMMENT '主键，雪花 ID',
+    `name`      VARCHAR(64)     NOT NULL COMMENT '标签名称',
+    `type`      VARCHAR(32)              DEFAULT NULL COMMENT '标签类型（如 ALGO/DS/COURSE 等）',
+    `created_at` DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_tag_name` (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='题目标签';
+
+CREATE TABLE IF NOT EXISTS `problem_tag` (
+    `id`         BIGINT UNSIGNED NOT NULL COMMENT '主键，雪花 ID',
+    `problem_id` BIGINT UNSIGNED NOT NULL COMMENT '题目 ID',
+    `tag_id`     BIGINT UNSIGNED NOT NULL COMMENT '标签 ID',
+    `created_at` DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_problem_tag` (`problem_id`,`tag_id`),
+    KEY `idx_problem_tag_problem` (`problem_id`),
+    KEY `idx_problem_tag_tag` (`tag_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='题目-标签关联';
+
+CREATE TABLE IF NOT EXISTS `submission` (
+    `id`          BIGINT UNSIGNED NOT NULL COMMENT '主键，雪花 ID',
+    `user_id`     BIGINT UNSIGNED NOT NULL COMMENT '提交用户 ID',
+    `problem_id`  BIGINT UNSIGNED NOT NULL COMMENT '题目 ID',
+    `language`    VARCHAR(32)     NOT NULL COMMENT '代码语言，如 C++/Java/Python3 等',
+    `source_code` MEDIUMTEXT      NOT NULL COMMENT '源代码内容',
+    `status`      ENUM('QUEUED','RUNNING','AC','WA','TLE','MLE','RE','CE','SYSTEM_ERROR') NOT NULL DEFAULT 'QUEUED' COMMENT '判题状态（stub 阶段仅使用 QUEUED 或手动更新）',
+    `time_ms`     INT                      DEFAULT NULL COMMENT '运行时间（毫秒）',
+    `memory_kb`   INT                      DEFAULT NULL COMMENT '内存消耗（KB）',
+    `compile_message` TEXT                DEFAULT NULL COMMENT '编译信息（可选）',
+    `judge_message`   TEXT                DEFAULT NULL COMMENT '判题信息（可选）',
+    `created_at`  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '提交时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_submission_user_problem` (`user_id`,`problem_id`,`created_at`),
+    KEY `idx_submission_problem` (`problem_id`,`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='提交记录表（stub 阶段）';
+
+CREATE TABLE IF NOT EXISTS `user_problem_progress` (
+    `id`               BIGINT UNSIGNED NOT NULL COMMENT '主键，雪花 ID',
+    `user_id`          BIGINT UNSIGNED NOT NULL COMMENT '用户 ID',
+    `problem_id`       BIGINT UNSIGNED NOT NULL COMMENT '题目 ID',
+    `status`           ENUM('UNSOLVED','ATTEMPTED','SOLVED') NOT NULL DEFAULT 'UNSOLVED' COMMENT '做题状态',
+    `last_submission_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '最近一次提交 ID',
+    `updated_at`       DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最近更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_user_problem` (`user_id`,`problem_id`),
+    KEY `idx_user_problem_status` (`user_id`,`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户-题目进度';
+
+INSERT INTO `tag` (`id`, `name`, `type`, `created_at`, `updated_at`)
+VALUES
+    (2000000000000000001, '数组', 'ALGO', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2000000000000000002, '哈希表', 'ALGO', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2000000000000000003, '链表', 'DS', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2000000000000000004, '滑动窗口', 'ALGO', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON DUPLICATE KEY UPDATE
+    `type` = VALUES(`type`),
+    `updated_at` = CURRENT_TIMESTAMP;
+
+INSERT INTO `problem` (
+    `id`, `problem_no`, `title`, `difficulty`, `statement_md`,
+    `time_limit_ms`, `memory_limit_kb`, `status`,
+    `submit_count`, `accepted_count`,
+    `is_deleted`, `created_at`, `updated_at`, `created_by`, `updated_by`
+) VALUES
+    (
+        2100000000000000001,
+        1,
+        '两数之和',
+        'EASY',
+        '给定一个整数数组 `nums` 和一个整数目标值 `target`，请你在该数组中找出 **和为目标值** `target` 的那 **两个** 整数，并返回它们的数组下标。\n\n你可以假设每种输入只会对应一个答案。但是，数组中同一个元素在答案里不能重复出现。\n\n你可以按任意顺序返回答案。\n\n**示例：**\n\n- 输入：`nums = [2,7,11,15]`, `target = 9`\n- 输出：`[0,1]`\n\n**提示：**\n\n- `2 <= nums.length <= 10^4`\n- `-10^9 <= nums[i] <= 10^9`\n- `-10^9 <= target <= 10^9`\n- 只会存在一个有效答案\n',
+        1000,
+        256000,
+        'PUBLISHED',
+        0,
+        0,
+        0,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP,
+        1998338632572506116,
+        1998338632572506116
+    ),
+    (
+        2100000000000000002,
+        2,
+        '两数相加',
+        'MEDIUM',
+        '给你两个 **非空** 的链表，表示两个非负的整数。它们每位数字都是按照 **逆序** 方式存储的，并且每个节点只能存储 **一位** 数字。\n\n请你将两个数相加，并以相同形式返回一个表示和的链表。\n\n你可以假设除了数字 0 之外，这两个数都不会以 0 开头。\n',
+        2000,
+        256000,
+        'PUBLISHED',
+        0,
+        0,
+        0,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP,
+        1998338632572506116,
+        1998338632572506116
+    )
+ON DUPLICATE KEY UPDATE
+    `title` = VALUES(`title`),
+    `difficulty` = VALUES(`difficulty`),
+    `status` = VALUES(`status`),
+    `updated_at` = CURRENT_TIMESTAMP;
+
+INSERT INTO `problem_tag` (`id`, `problem_id`, `tag_id`, `created_at`)
+VALUES
+    (2200000000000000001, 2100000000000000001, 2000000000000000001, CURRENT_TIMESTAMP),
+    (2200000000000000002, 2100000000000000001, 2000000000000000002, CURRENT_TIMESTAMP),
+    (2200000000000000003, 2100000000000000002, 2000000000000000003, CURRENT_TIMESTAMP);
+
+
+-- ============================================================================
+-- Source: V1_4__update_two_sum_console_io.sql
+-- ============================================================================
+
+UPDATE `problem`
+SET `statement_md` = '给定一个整数数组 `nums` 和一个整数目标值 `target`，请你在该数组中找出 **和为目标值** `target` 的那 **两个** 整数，并输出它们的数组下标。\n\n你可以假设每种输入只会对应一个答案。但是，数组中同一个元素在答案里不能重复出现。\n\n你可以按任意顺序输出答案。\n\n**输入说明：**\n\n本题采用控制台标准输入方式，不使用函数传参。\n\n- 第一行输入一个整数 `n`，表示数组长度\n- 第二行输入 `n` 个整数，表示数组 `nums`\n- 第三行输入一个整数 `target`\n\n**输出说明：**\n\n输出两个整数，表示答案下标，使用空格分隔。\n\n**示例：**\n\n- 输入：\n  ```text\n  4\n  2 7 11 15\n  9\n  ```\n- 输出：\n  ```text\n  0 1\n  ```\n\n**提示：**\n\n- `2 <= nums.length <= 10^4`\n- `-10^9 <= nums[i] <= 10^9`\n- `-10^9 <= target <= 10^9`\n- 只会存在一个有效答案\n'
+WHERE `problem_no` = 1;
+
+
+-- ============================================================================
+-- Source: V1_5__seed_sample_problem_set.sql
+-- ============================================================================
+
+-- 扩充题库示例数据到 30 题，并统一为完整的控制台输入输出题面
+
+INSERT INTO `tag` (`id`, `name`, `type`, `created_at`, `updated_at`)
+VALUES
+    (2000000000000000001, '数组', 'ALGO', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2000000000000000002, '哈希表', 'ALGO', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2000000000000000003, '字符串', 'ALGO', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2000000000000000004, '双指针', 'ALGO', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2000000000000000005, '前缀和', 'ALGO', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2000000000000000006, '二分查找', 'ALGO', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2000000000000000007, '栈', 'DS', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2000000000000000008, '队列', 'DS', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2000000000000000009, '矩阵', 'ALGO', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2000000000000000010, '图论', 'GRAPH', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2000000000000000011, '树', 'TREE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2000000000000000012, '动态规划', 'ALGO', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2000000000000000013, '贪心', 'ALGO', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2000000000000000014, '模拟', 'ALGO', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2000000000000000015, '数学', 'ALGO', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2000000000000000016, '堆', 'DS', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2000000000000000017, '并查集', 'GRAPH', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2000000000000000018, '排序', 'ALGO', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2000000000000000019, '差分', 'ALGO', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2000000000000000020, '广度优先搜索', 'GRAPH', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON DUPLICATE KEY UPDATE
+    `type` = VALUES(`type`),
+    `updated_at` = CURRENT_TIMESTAMP;
+
+INSERT INTO `problem` (
+    `id`, `problem_no`, `title`, `difficulty`, `statement_md`,
+    `time_limit_ms`, `memory_limit_kb`, `status`,
+    `submit_count`, `accepted_count`,
+    `is_deleted`, `created_at`, `updated_at`, `created_by`, `updated_by`
+) VALUES
+    (
+        2100000000000000001,
+        1,
+        '两数之和',
+        'EASY',
+        '给定一个长度为 `n` 的整数数组 `nums` 和一个目标值 `target`，请你找出数组中两个不同位置的元素，使它们的和恰好等于 `target`，并输出这两个位置的下标。\n\n本题使用控制台标准输入，不使用函数签名。若存在多组合法，测试数据保证只有一组正确答案。\n\n**输入格式：**\n\n- 第一行输入一个整数 `n`\n- 第二行输入 `n` 个整数，表示数组 `nums`\n- 第三行输入一个整数 `target`\n\n**输出格式：**\n\n输出两个整数，表示满足条件的下标，使用空格分隔，顺序任意。\n\n**样例 1：**\n\n- 输入：\n  ```text\n  4\n  2 7 11 15\n  9\n  ```\n- 输出：\n  ```text\n  0 1\n  ```\n\n**数据范围：**\n\n- `2 <= n <= 10^4`\n- `-10^9 <= nums[i] <= 10^9`\n- `-10^9 <= target <= 10^9`\n- 仅存在一组有效答案\n\n**提示：**\n\n可以一边扫描数组，一边把已经访问过的数及其下标记录下来。',
+        1000,
+        256000,
+        'PUBLISHED',
+        1280,
+        816,
+        0,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP,
+        1998338632572506116,
+        1998338632572506116
+    ),
+    (
+        2100000000000000002,
+        2,
+        '最长不重复子串',
+        'MEDIUM',
+        '给定一个仅由小写字母、大小写字母和数字组成的字符串 `s`，请你求出其中 **不包含重复字符** 的最长连续子串长度。\n\n本题采用控制台标准输入。你需要输出一个整数，而不是输出具体子串内容。题目 2 的目标是让你熟悉双指针与滑动窗口的基本写法。\n\n**输入格式：**\n\n- 第一行输入一个字符串 `s`\n\n**输出格式：**\n\n输出一个整数，表示最长不重复子串的长度。\n\n**样例 1：**\n\n- 输入：\n  ```text\n  abcabcbb\n  ```\n- 输出：\n  ```text\n  3\n  ```\n\n**样例 2：**\n\n- 输入：\n  ```text\n  bbbbb\n  ```\n- 输出：\n  ```text\n  1\n  ```\n\n**数据范围：**\n\n- `1 <= |s| <= 2 * 10^5`\n- 字符集仅包含英文字母和数字\n\n**提示：**\n\n维护一个窗口 `[l, r]` 表示当前无重复区间。当右端加入新字符后，如果出现重复，就不断移动左端直到窗口重新合法。',
+        1500,
+        256000,
+        'PUBLISHED',
+        1190,
+        534,
+        0,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP,
+        1998338632572506116,
+        1998338632572506116
+    ),
+    (
+        2100000000000000003,
+        3,
+        '有效括号序列',
+        'EASY',
+        '给定一个只包含 `(`、`)`、`[`、`]`、`{`、`}` 的字符串 `s`，请判断该字符串是否为一个合法的括号序列。\n\n一个合法括号序列要求每个左括号都能被正确类型的右括号配对，且配对顺序不能交叉。\n\n**输入格式：**\n\n- 第一行输入一个字符串 `s`\n\n**输出格式：**\n\n若字符串合法，输出 `YES`；否则输出 `NO`。\n\n**样例：**\n\n- 输入：\n  ```text\n  {[()()]}\n  ```\n- 输出：\n  ```text\n  YES\n  ```\n\n**数据范围：**\n\n- `1 <= |s| <= 2 * 10^5`\n\n**提示：**\n\n遇到左括号压栈，遇到右括号时检查栈顶是否能够匹配。',
+        1000,
+        256000,
+        'PUBLISHED',
+        980,
+        702,
+        0,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP,
+        1998338632572506116,
+        1998338632572506116
+    ),
+    (
+        2100000000000000004,
+        4,
+        '合并重叠区间',
+        'MEDIUM',
+        '给定 `n` 个闭区间 `[l_i, r_i]`，请将其中所有有交集的区间合并，并按左端点升序输出最终结果。\n\n如果两个区间仅在端点相接，例如 `[1,3]` 和 `[3,5]`，也视为可以合并。\n\n**输入格式：**\n\n- 第一行输入一个整数 `n`\n- 接下来 `n` 行，每行输入两个整数 `l_i`、`r_i`\n\n**输出格式：**\n\n- 第一行输出合并后的区间个数 `m`\n- 接下来 `m` 行，每行输出一个合并后的区间左右端点\n\n**样例：**\n\n- 输入：\n  ```text\n  4\n  1 3\n  2 6\n  8 10\n  15 18\n  ```\n- 输出：\n  ```text\n  3\n  1 6\n  8 10\n  15 18\n  ```\n\n**数据范围：**\n\n- `1 <= n <= 2 * 10^5`\n- `-10^9 <= l_i <= r_i <= 10^9`\n\n**提示：**\n\n先按左端点排序，再顺序扫描并维护当前正在合并的区间。',
+        1500,
+        256000,
+        'PUBLISHED',
+        860,
+        451,
+        0,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP,
+        1998338632572506116,
+        1998338632572506116
+    ),
+    (
+        2100000000000000005,
+        5,
+        '数组右旋',
+        'EASY',
+        '给定一个长度为 `n` 的数组和一个非负整数 `k`，请你将数组整体向右轮转 `k` 次，并输出轮转后的数组。\n\n若 `k` 大于数组长度，应按 `k mod n` 处理。\n\n**输入格式：**\n\n- 第一行输入两个整数 `n`、`k`\n- 第二行输入 `n` 个整数\n\n**输出格式：**\n\n输出轮转后的数组，使用空格分隔。\n\n**样例：**\n\n- 输入：\n  ```text\n  7 3\n  1 2 3 4 5 6 7\n  ```\n- 输出：\n  ```text\n  5 6 7 1 2 3 4\n  ```\n\n**数据范围：**\n\n- `1 <= n <= 2 * 10^5`\n- `0 <= k <= 10^18`\n\n**提示：**\n\n可以直接构造新数组，也可以使用三次翻转原地完成。',
+        1000,
+        256000,
+        'PUBLISHED',
+        735,
+        562,
+        0,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP,
+        1998338632572506116,
+        1998338632572506116
+    ),
+    (
+        2100000000000000006,
+        6,
+        '区间加法',
+        'MEDIUM',
+        '给定一个长度为 `n` 的初始数组，以及 `m` 次区间加法操作。每次操作给出 `l`、`r`、`delta`，表示把下标区间 `[l, r]` 内的所有元素同时加上 `delta`。\n\n请在所有操作结束后输出最终数组。\n\n**输入格式：**\n\n- 第一行输入两个整数 `n`、`m`\n- 第二行输入 `n` 个整数，表示初始数组\n- 接下来 `m` 行，每行输入三个整数 `l`、`r`、`delta`\n\n**输出格式：**\n\n输出最终数组，使用空格分隔。\n\n**样例：**\n\n- 输入：\n  ```text\n  5 3\n  1 2 3 4 5\n  1 3 2\n  2 5 -1\n  4 4 7\n  ```\n- 输出：\n  ```text\n  3 3 4 10 4\n  ```\n\n**数据范围：**\n\n- `1 <= n, m <= 2 * 10^5`\n- `1 <= l <= r <= n`\n- 所有中间结果均在 64 位有符号整数范围内\n\n**提示：**\n\n直接逐个区间修改会超时，考虑使用差分数组。',
+        1500,
+        256000,
+        'PUBLISHED',
+        643,
+        297,
+        0,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP,
+        1998338632572506116,
+        1998338632572506116
+    ),
+    (
+        2100000000000000007,
+        7,
+        '静态区间求和',
+        'EASY',
+        '给定一个长度为 `n` 的数组和 `q` 次查询，每次查询给出 `l`、`r`，请输出区间 `[l, r]` 内所有元素之和。\n\n本题没有修改操作，适合使用前缀和进行一次预处理后快速回答所有查询。\n\n**输入格式：**\n\n- 第一行输入两个整数 `n`、`q`\n- 第二行输入 `n` 个整数\n- 接下来 `q` 行，每行输入两个整数 `l`、`r`\n\n**输出格式：**\n\n对每次查询输出一行答案。\n\n**样例：**\n\n- 输入：\n  ```text\n  5 3\n  1 2 3 4 5\n  1 3\n  2 4\n  3 5\n  ```\n- 输出：\n  ```text\n  6\n  9\n  12\n  ```\n\n**数据范围：**\n\n- `1 <= n, q <= 2 * 10^5`\n- `1 <= l <= r <= n`\n\n**提示：**\n\n令 `pre[i]` 表示前 `i` 个数之和，则区间和可以在 `O(1)` 时间得到。',
+        1000,
+        256000,
+        'PUBLISHED',
+        821,
+        679,
+        0,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP,
+        1998338632572506116,
+        1998338632572506116
+    ),
+    (
+        2100000000000000008,
+        8,
+        '二分查找左边界',
+        'EASY',
+        '给定一个非递减排序数组 `a` 和一个目标值 `target`，请找出数组中 **第一个大于等于** `target` 的位置下标。如果所有元素都小于 `target`，输出 `-1`。\n\n本题强调的是边界型二分，而不是普通查找。\n\n**输入格式：**\n\n- 第一行输入两个整数 `n`、`target`\n- 第二行输入 `n` 个非递减整数\n\n**输出格式：**\n\n输出满足条件的最小下标，使用 0 下标；若不存在则输出 `-1`。\n\n**样例：**\n\n- 输入：\n  ```text\n  6 5\n  1 3 5 5 7 9\n  ```\n- 输出：\n  ```text\n  2\n  ```\n\n**数据范围：**\n\n- `1 <= n <= 2 * 10^5`\n- 数组已按非递减顺序给出\n\n**提示：**\n\n当 `a[mid] >= target` 时，不要急着返回，而是继续向左缩小答案范围。',
+        1000,
+        256000,
+        'PUBLISHED',
+        702,
+        558,
+        0,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP,
+        1998338632572506116,
+        1998338632572506116
+    ),
+    (
+        2100000000000000009,
+        9,
+        '去重后排序',
+        'EASY',
+        '给定 `n` 个整数，请先去掉重复元素，再按从小到大的顺序输出所有不同的数。\n\n这是一个典型的排序与去重练习题，重点是处理输入规模较大时的效率问题。\n\n**输入格式：**\n\n- 第一行输入一个整数 `n`\n- 第二行输入 `n` 个整数\n\n**输出格式：**\n\n输出去重并排序后的结果，使用空格分隔。若只剩一个数，也只输出一个值。\n\n**样例：**\n\n- 输入：\n  ```text\n  8\n  5 3 5 2 2 9 1 3\n  ```\n- 输出：\n  ```text\n  1 2 3 5 9\n  ```\n\n**数据范围：**\n\n- `1 <= n <= 2 * 10^5`\n- 数值范围在 32 位有符号整数内\n\n**提示：**\n\n排序后线性扫描即可完成去重。',
+        1000,
+        256000,
+        'PUBLISHED',
+        530,
+        418,
+        0,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP,
+        1998338632572506116,
+        1998338632572506116
+    ),
+    (
+        2100000000000000010,
+        10,
+        '旋转数组最小值',
+        'MEDIUM',
+        '一个原本严格递增的数组经过若干次旋转后得到新数组，例如 `1 2 3 4 5` 可能变成 `3 4 5 1 2`。请你找出旋转后数组中的最小值。\n\n测试数据保证数组中不存在重复元素。\n\n**输入格式：**\n\n- 第一行输入一个整数 `n`\n- 第二行输入 `n` 个整数，表示旋转后的数组\n\n**输出格式：**\n\n输出数组中的最小值。\n\n**样例：**\n\n- 输入：\n  ```text\n  5\n  4 5 1 2 3\n  ```\n- 输出：\n  ```text\n  1\n  ```\n\n**数据范围：**\n\n- `1 <= n <= 2 * 10^5`\n- 原数组严格递增\n\n**提示：**\n\n最小值所在位置是有序段断开的地方，可用二分查找定位。',
+        1500,
+        256000,
+        'PUBLISHED',
+        618,
+        303,
+        0,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP,
+        1998338632572506116,
+        1998338632572506116
+    ),
+    (
+        2100000000000000011,
+        11,
+        '下一个更大元素',
+        'EASY',
+        '给定一个长度为 `n` 的数组，对于每个位置 `i`，请找到其右侧第一个严格大于 `a[i]` 的元素值。若不存在，则输出 `-1`。\n\n本题适合作为单调栈模板题。\n\n**输入格式：**\n\n- 第一行输入一个整数 `n`\n- 第二行输入 `n` 个整数\n\n**输出格式：**\n\n输出 `n` 个整数，第 `i` 个数表示位置 `i` 的答案。\n\n**样例：**\n\n- 输入：\n  ```text\n  5\n  2 1 2 4 3\n  ```\n- 输出：\n  ```text\n  4 2 4 -1 -1\n  ```\n\n**数据范围：**\n\n- `1 <= n <= 2 * 10^5`\n\n**提示：**\n\n从左到右扫描时，维护一个单调递减栈，当前元素可以为栈内若干位置提供答案。',
+        1000,
+        256000,
+        'PUBLISHED',
+        689,
+        502,
+        0,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP,
+        1998338632572506116,
+        1998338632572506116
+    ),
+    (
+        2100000000000000012,
+        12,
+        '滑动窗口最大值',
+        'HARD',
+        '给定一个长度为 `n` 的数组和一个窗口大小 `k`，窗口从左到右每次移动一格。请输出每个窗口中的最大值。\n\n要求整体时间复杂度尽量接近 `O(n)`。\n\n**输入格式：**\n\n- 第一行输入两个整数 `n`、`k`\n- 第二行输入 `n` 个整数\n\n**输出格式：**\n\n输出 `n-k+1` 个整数，依次表示每个窗口的最大值。\n\n**样例：**\n\n- 输入：\n  ```text\n  8 3\n  1 3 -1 -3 5 3 6 7\n  ```\n- 输出：\n  ```text\n  3 3 5 5 6 7\n  ```\n\n**数据范围：**\n\n- `1 <= k <= n <= 2 * 10^5`\n- 元素范围在 32 位有符号整数内\n\n**提示：**\n\n使用双端队列维护可能成为窗口最大值的下标，并保证队列中的值单调递减。',
+        2000,
+        256000,
+        'PUBLISHED',
+        955,
+        271,
+        0,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP,
+        1998338632572506116,
+        1998338632572506116
+    ),
+    (
+        2100000000000000013,
+        13,
+        '矩阵螺旋遍历',
+        'MEDIUM',
+        '给定一个 `n × m` 的矩阵，请按照顺时针螺旋顺序输出所有元素。\n\n例如先从第一行左到右，再沿最右列自上而下，然后从底行右到左，最后沿最左列自下而上，重复直到输出完毕。\n\n**输入格式：**\n\n- 第一行输入两个整数 `n`、`m`\n- 接下来 `n` 行，每行输入 `m` 个整数\n\n**输出格式：**\n\n输出螺旋顺序下的所有元素，使用空格分隔。\n\n**样例：**\n\n- 输入：\n  ```text\n  3 3\n  1 2 3\n  4 5 6\n  7 8 9\n  ```\n- 输出：\n  ```text\n  1 2 3 6 9 8 7 4 5\n  ```\n\n**数据范围：**\n\n- `1 <= n, m <= 300`\n\n**提示：**\n\n维护上、下、左、右四个边界，每走完一条边就向内收缩。',
+        1500,
+        256000,
+        'PUBLISHED',
+        742,
+        366,
+        0,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP,
+        1998338632572506116,
+        1998338632572506116
+    ),
+    (
+        2100000000000000014,
+        14,
+        '岛屿数量',
+        'MEDIUM',
+        '给定一个由字符 `0` 和 `1` 组成的网格，其中 `1` 表示陆地，`0` 表示海水。相邻的陆地若在上下左右四个方向连通，则属于同一座岛屿。\n\n请计算网格中岛屿的总数。\n\n**输入格式：**\n\n- 第一行输入两个整数 `n`、`m`\n- 接下来 `n` 行，每行输入一个长度为 `m` 的字符串，仅包含 `0` 或 `1`\n\n**输出格式：**\n\n输出一个整数，表示岛屿数量。\n\n**样例：**\n\n- 输入：\n  ```text\n  4 5\n  11000\n  11010\n  00101\n  00111\n  ```\n- 输出：\n  ```text\n  3\n  ```\n\n**数据范围：**\n\n- `1 <= n, m <= 500`\n\n**提示：**\n\n每发现一个未访问的陆地单元，就从该点出发进行一次 BFS 或 DFS。',
+        1500,
+        256000,
+        'PUBLISHED',
+        886,
+        401,
+        0,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP,
+        1998338632572506116,
+        1998338632572506116
+    ),
+    (
+        2100000000000000015,
+        15,
+        '网格最短路',
+        'MEDIUM',
+        '给定一个 `n × m` 的网格，`0` 表示可以通行，`1` 表示障碍物。你从左上角 `(1,1)` 出发，只能在上下左右四个方向移动，目标是到达右下角 `(n,m)`。\n\n请输出最少步数；若无法到达则输出 `-1`。\n\n**输入格式：**\n\n- 第一行输入两个整数 `n`、`m`\n- 接下来 `n` 行，每行输入 `m` 个整数 `0` 或 `1`\n\n**输出格式：**\n\n输出一个整数，表示最短步数。\n\n**样例：**\n\n- 输入：\n  ```text\n  3 4\n  0 0 0 1\n  1 1 0 1\n  0 0 0 0\n  ```\n- 输出：\n  ```text\n  5\n  ```\n\n**数据范围：**\n\n- `1 <= n, m <= 500`\n- 起点和终点保证不为障碍物\n\n**提示：**\n\n边权都相同，使用 BFS 即可得到最短路。',
+        1500,
+        256000,
+        'PUBLISHED',
+        799,
+        348,
+        0,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP,
+        1998338632572506116,
+        1998338632572506116
+    ),
+    (
+        2100000000000000016,
+        16,
+        '二叉树最大深度',
+        'EASY',
+        '给定一棵二叉树的层序序列，其中空节点使用字符串 `null` 表示。请输出这棵树的最大深度。\n\n根节点所在层深度记为 `1`。若整棵树只有一个根节点，则答案为 `1`。\n\n**输入格式：**\n\n- 第一行输入一个整数 `n`，表示层序序列长度\n- 第二行输入 `n` 个字段，每个字段要么是整数，要么是 `null`\n\n**输出格式：**\n\n输出一个整数，表示最大深度。\n\n**样例：**\n\n- 输入：\n  ```text\n  7\n  3 9 20 null null 15 7\n  ```\n- 输出：\n  ```text\n  3\n  ```\n\n**数据范围：**\n\n- `1 <= n <= 2 * 10^5`\n- 输入保证能表示一棵合法二叉树\n\n**提示：**\n\n可以边建树边 BFS，也可以直接利用层序索引关系完成遍历。',
+        1500,
+        256000,
+        'PUBLISHED',
+        520,
+        347,
+        0,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP,
+        1998338632572506116,
+        1998338632572506116
+    ),
+    (
+        2100000000000000017,
+        17,
+        '二叉树层序遍历',
+        'MEDIUM',
+        '给定一棵二叉树的层序序列，其中空节点使用 `null` 表示。请按从上到下、从左到右的顺序输出每一层的节点值。\n\n为了便于判题，你需要把同一层的结果输出在同一行。\n\n**输入格式：**\n\n- 第一行输入一个整数 `n`\n- 第二行输入 `n` 个字段，每个字段要么是整数，要么是 `null`\n\n**输出格式：**\n\n- 第一行输出树的层数 `h`\n- 接下来 `h` 行，每行输出一层的节点值，使用空格分隔\n\n**样例：**\n\n- 输入：\n  ```text\n  7\n  3 9 20 null null 15 7\n  ```\n- 输出：\n  ```text\n  3\n  3\n  9 20\n  15 7\n  ```\n\n**数据范围：**\n\n- `1 <= n <= 2 * 10^5`\n\n**提示：**\n\n标准做法是使用队列逐层扩展。',
+        1500,
+        256000,
+        'PUBLISHED',
+        608,
+        295,
+        0,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP,
+        1998338632572506116,
+        1998338632572506116
+    ),
+    (
+        2100000000000000018,
+        18,
+        '无向图连通块数量',
+        'MEDIUM',
+        '给定一个包含 `n` 个点、`m` 条边的无向图，点的编号从 `1` 到 `n`。请统计整张图中连通块的个数。\n\n图中可能存在重边和自环，但它们不影响连通块定义。\n\n**输入格式：**\n\n- 第一行输入两个整数 `n`、`m`\n- 接下来 `m` 行，每行输入两个整数 `u`、`v`\n\n**输出格式：**\n\n输出一个整数，表示连通块数量。\n\n**样例：**\n\n- 输入：\n  ```text\n  6 3\n  1 2\n  2 3\n  5 6\n  ```\n- 输出：\n  ```text\n  3\n  ```\n\n**数据范围：**\n\n- `1 <= n <= 2 * 10^5`\n- `0 <= m <= 2 * 10^5`\n\n**提示：**\n\n可以用 BFS、DFS 或并查集解决。',
+        1500,
+        256000,
+        'PUBLISHED',
+        691,
+        355,
+        0,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP,
+        1998338632572506116,
+        1998338632572506116
+    ),
+    (
+        2100000000000000019,
+        19,
+        '拓扑排序模板',
+        'MEDIUM',
+        '给定一个有向图，判断它是否存在拓扑序。如果存在，请输出任意一种合法的拓扑排序；如果不存在，请输出 `IMPOSSIBLE`。\n\n图中的点编号为 `1` 到 `n`。\n\n**输入格式：**\n\n- 第一行输入两个整数 `n`、`m`\n- 接下来 `m` 行，每行输入一条有向边 `u v`，表示 `u -> v`\n\n**输出格式：**\n\n- 若存在拓扑序，输出一行 `n` 个整数\n- 若不存在，输出 `IMPOSSIBLE`\n\n**样例：**\n\n- 输入：\n  ```text\n  4 3\n  1 2\n  1 3\n  3 4\n  ```\n- 输出：\n  ```text\n  1 2 3 4\n  ```\n\n**数据范围：**\n\n- `1 <= n, m <= 2 * 10^5`\n\n**提示：**\n\n可以使用入度数组配合队列进行 Kahn 算法。',
+        1500,
+        256000,
+        'PUBLISHED',
+        648,
+        262,
+        0,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP,
+        1998338632572506116,
+        1998338632572506116
+    ),
+    (
+        2100000000000000020,
+        20,
+        '并查集连通查询',
+        'MEDIUM',
+        '给定 `n` 个点和 `q` 个操作。操作分为两类：\n\n- `1 x y`：把点 `x` 和点 `y` 合并到同一个集合\n- `2 x y`：查询点 `x` 和点 `y` 是否属于同一个集合\n\n对于每个查询操作，请输出 `YES` 或 `NO`。\n\n**输入格式：**\n\n- 第一行输入两个整数 `n`、`q`\n- 接下来 `q` 行，每行输入三个整数，表示一次操作\n\n**输出格式：**\n\n对每个类型为 `2` 的操作输出一行答案。\n\n**样例：**\n\n- 输入：\n  ```text\n  5 5\n  1 1 2\n  1 3 4\n  2 1 3\n  1 2 3\n  2 1 4\n  ```\n- 输出：\n  ```text\n  NO\n  YES\n  ```\n\n**数据范围：**\n\n- `1 <= n, q <= 2 * 10^5`\n\n**提示：**\n\n路径压缩与按秩合并可以显著优化并查集性能。',
+        1500,
+        256000,
+        'PUBLISHED',
+        714,
+        338,
+        0,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP,
+        1998338632572506116,
+        1998338632572506116
+    ),
+    (
+        2100000000000000021,
+        21,
+        '最长上升子序列',
+        'MEDIUM',
+        '给定一个长度为 `n` 的整数序列，请求出其中最长严格上升子序列的长度。\n\n子序列不要求连续，但必须保持原有相对顺序。\n\n**输入格式：**\n\n- 第一行输入一个整数 `n`\n- 第二行输入 `n` 个整数\n\n**输出格式：**\n\n输出一个整数，表示最长上升子序列长度。\n\n**样例：**\n\n- 输入：\n  ```text\n  8\n  10 9 2 5 3 7 101 18\n  ```\n- 输出：\n  ```text\n  4\n  ```\n\n**数据范围：**\n\n- `1 <= n <= 2 * 10^5`\n\n**提示：**\n\n朴素动态规划是 `O(n^2)`，进阶做法可结合贪心和二分优化到 `O(n log n)`。',
+        1500,
+        256000,
+        'PUBLISHED',
+        841,
+        316,
+        0,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP,
+        1998338632572506116,
+        1998338632572506116
+    ),
+    (
+        2100000000000000022,
+        22,
+        '最长公共子序列',
+        'MEDIUM',
+        '给定两个字符串 `a` 和 `b`，请输出它们的最长公共子序列长度。\n\n子序列不要求连续，但必须保持原始相对顺序。\n\n**输入格式：**\n\n- 第一行输入字符串 `a`\n- 第二行输入字符串 `b`\n\n**输出格式：**\n\n输出一个整数，表示最长公共子序列长度。\n\n**样例：**\n\n- 输入：\n  ```text\n  abcde\n  ace\n  ```\n- 输出：\n  ```text\n  3\n  ```\n\n**数据范围：**\n\n- `1 <= |a|, |b| <= 3000`\n\n**提示：**\n\n设 `dp[i][j]` 表示 `a` 的前 `i` 个字符与 `b` 的前 `j` 个字符的答案，根据末位字符是否相等进行转移。',
+        2000,
+        256000,
+        'PUBLISHED',
+        782,
+        291,
+        0,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP,
+        1998338632572506116,
+        1998338632572506116
+    ),
+    (
+        2100000000000000023,
+        23,
+        '最小路径和',
+        'MEDIUM',
+        '给定一个 `n × m` 的非负整数矩阵，从左上角出发，每次只能向右或向下移动一步，求到达右下角的最小路径和。\n\n路径和定义为沿途经过的所有格子权值之和，包含起点和终点。\n\n**输入格式：**\n\n- 第一行输入两个整数 `n`、`m`\n- 接下来 `n` 行，每行输入 `m` 个非负整数\n\n**输出格式：**\n\n输出一个整数，表示最小路径和。\n\n**样例：**\n\n- 输入：\n  ```text\n  3 3\n  1 3 1\n  1 5 1\n  4 2 1\n  ```\n- 输出：\n  ```text\n  7\n  ```\n\n**数据范围：**\n\n- `1 <= n, m <= 1000`\n- 矩阵元素 `0 <= grid[i][j] <= 10^4`\n\n**提示：**\n\n这是经典网格动态规划问题，状态只依赖上方和左方。',
+        1500,
+        256000,
+        'PUBLISHED',
+        713,
+        344,
+        0,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP,
+        1998338632572506116,
+        1998338632572506116
+    ),
+    (
+        2100000000000000024,
+        24,
+        '零钱兑换',
+        'MEDIUM',
+        '给定 `n` 种硬币面额和一个目标金额 `amount`，每种硬币可以使用无限次。请输出凑出目标金额所需的最少硬币数；如果无法凑出，输出 `-1`。\n\n**输入格式：**\n\n- 第一行输入两个整数 `n`、`amount`\n- 第二行输入 `n` 个正整数，表示硬币面额\n\n**输出格式：**\n\n输出一个整数，表示最少硬币数。\n\n**样例：**\n\n- 输入：\n  ```text\n  3 11\n  1 2 5\n  ```\n- 输出：\n  ```text\n  3\n  ```\n\n**数据范围：**\n\n- `1 <= n <= 100`\n- `0 <= amount <= 10^5`\n- `1 <= coin[i] <= 10^5`\n\n**提示：**\n\n这是完全背包模型。可以用一维动态规划求解，初始时把无法达到的状态设为一个足够大的值。',
+        1500,
+        256000,
+        'PUBLISHED',
+        768,
+        327,
+        0,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP,
+        1998338632572506116,
+        1998338632572506116
+    ),
+    (
+        2100000000000000025,
+        25,
+        '01 背包入门',
+        'MEDIUM',
+        '给定 `n` 件物品和一个容量为 `W` 的背包。第 `i` 件物品有体积 `w_i` 和价值 `v_i`，每件物品最多只能选择一次。请输出在不超过背包容量的前提下，能够获得的最大总价值。\n\n**输入格式：**\n\n- 第一行输入两个整数 `n`、`W`\n- 接下来 `n` 行，每行输入两个整数 `w_i`、`v_i`\n\n**输出格式：**\n\n输出一个整数，表示最大总价值。\n\n**样例：**\n\n- 输入：\n  ```text\n  4 5\n  1 2\n  2 4\n  3 4\n  4 5\n  ```\n- 输出：\n  ```text\n  8\n  ```\n\n**数据范围：**\n\n- `1 <= n <= 2000`\n- `1 <= W <= 2 * 10^4`\n- `1 <= w_i, v_i <= 10^4`\n\n**提示：**\n\n使用一维 `dp` 时，容量维度必须从大到小枚举。',
+        1500,
+        256000,
+        'PUBLISHED',
+        655,
+        282,
+        0,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP,
+        1998338632572506116,
+        1998338632572506116
+    ),
+    (
+        2100000000000000026,
+        26,
+        '最多可参加的会议数',
+        'MEDIUM',
+        '给定 `n` 场会议，每场会议有开始时间和结束时间，参加者同一时刻只能参加一场会议。请你安排会议，使能参加的会议数量尽可能多。\n\n若一场会议在时间 `t` 结束，另一场会议也在时间 `t` 开始，则可以连续参加。\n\n**输入格式：**\n\n- 第一行输入一个整数 `n`\n- 接下来 `n` 行，每行输入两个整数 `start`、`end`\n\n**输出格式：**\n\n输出最多可以参加的会议数。\n\n**样例：**\n\n- 输入：\n  ```text\n  5\n  1 2\n  2 3\n  3 4\n  1 3\n  2 5\n  ```\n- 输出：\n  ```text\n  3\n  ```\n\n**数据范围：**\n\n- `1 <= n <= 2 * 10^5`\n- `0 <= start <= end <= 10^9`\n\n**提示：**\n\n按结束时间从小到大排序后贪心选择，是这类区间调度问题的标准策略。',
+        1500,
+        256000,
+        'PUBLISHED',
+        721,
+        389,
+        0,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP,
+        1998338632572506116,
+        1998338632572506116
+    ),
+    (
+        2100000000000000027,
+        27,
+        '合并果子最小代价',
+        'MEDIUM',
+        '有 `n` 堆果子，每次可以选择两堆合并，合并代价等于这两堆果子数量之和。合并完成后会生成一堆新的果子，并继续参与后续合并。请计算把所有果子合成一堆的最小总代价。\n\n**输入格式：**\n\n- 第一行输入一个整数 `n`\n- 第二行输入 `n` 个正整数，表示每堆果子的数量\n\n**输出格式：**\n\n输出一个整数，表示最小总代价。\n\n**样例：**\n\n- 输入：\n  ```text\n  4\n  1 2 9 10\n  ```\n- 输出：\n  ```text\n  34\n  ```\n\n**数据范围：**\n\n- `1 <= n <= 2 * 10^5`\n- 果子数量在 64 位有符号整数范围内\n\n**提示：**\n\n每次优先合并当前最小的两堆，这是 Huffman 合并模型，可用小根堆实现。',
+        1500,
+        256000,
+        'PUBLISHED',
+        644,
+        298,
+        0,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP,
+        1998338632572506116,
+        1998338632572506116
+    ),
+    (
+        2100000000000000028,
+        28,
+        '大整数加法',
+        'EASY',
+        '给定两个可能非常长的非负整数，它们以十进制字符串形式给出。请输出它们的和。\n\n由于数字长度可能超过普通整型范围，本题不能直接转成内置整数类型处理。\n\n**输入格式：**\n\n- 第一行输入字符串 `a`\n- 第二行输入字符串 `b`\n\n**输出格式：**\n\n输出一个字符串，表示 `a + b` 的结果。\n\n**样例：**\n\n- 输入：\n  ```text\n  987654321987654321\n  123456789123456789\n  ```\n- 输出：\n  ```text\n  1111111111111111110\n  ```\n\n**数据范围：**\n\n- `1 <= |a|, |b| <= 2 * 10^5`\n- 输入保证没有前导零，数字 `0` 除外\n\n**提示：**\n\n从低位到高位逐位相加，并维护进位即可。',
+        1000,
+        256000,
+        'PUBLISHED',
+        577,
+        454,
+        0,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP,
+        1998338632572506116,
+        1998338632572506116
+    ),
+    (
+        2100000000000000029,
+        29,
+        '表达式求值',
+        'MEDIUM',
+        '给定一个只包含非负整数、加号 `+`、减号 `-`、乘号 `*`、除号 `/` 和圆括号的中缀表达式，请输出其运算结果。\n\n表达式中可能包含空格。除法采用向零截断。\n\n**输入格式：**\n\n- 第一行输入一个字符串，表示表达式\n\n**输出格式：**\n\n输出一个整数，表示表达式结果。\n\n**样例：**\n\n- 输入：\n  ```text\n  (2+3)*4-10/5\n  ```\n- 输出：\n  ```text\n  18\n  ```\n\n**数据范围：**\n\n- 表达式长度 `1 <= |expr| <= 2 * 10^5`\n- 所有中间结果都在 64 位有符号整数范围内\n\n**提示：**\n\n可以使用两个栈，分别维护操作数与运算符，并根据优先级在合适时机进行计算。',
+        2000,
+        256000,
+        'PUBLISHED',
+        823,
+        266,
+        0,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP,
+        1998338632572506116,
+        1998338632572506116
+    ),
+    (
+        2100000000000000030,
+        30,
+        '前 K 小元素',
+        'EASY',
+        '给定一个长度为 `n` 的整数数组和一个整数 `k`，请输出数组中最小的 `k` 个元素，并按从小到大的顺序排列。\n\n若数组中存在重复元素，输出时也需要保留重复次数。\n\n**输入格式：**\n\n- 第一行输入两个整数 `n`、`k`\n- 第二行输入 `n` 个整数\n\n**输出格式：**\n\n输出 `k` 个整数，表示答案，使用空格分隔。\n\n**样例：**\n\n- 输入：\n  ```text\n  7 3\n  5 1 9 3 2 8 2\n  ```\n- 输出：\n  ```text\n  1 2 2\n  ```\n\n**数据范围：**\n\n- `1 <= k <= n <= 2 * 10^5`\n- 元素范围在 32 位有符号整数内\n\n**提示：**\n\n可以直接排序，也可以维护一个大小为 `k` 的大根堆以适应更大的数据规模。',
+        1000,
+        256000,
+        'PUBLISHED',
+        503,
+        387,
+        0,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP,
+        1998338632572506116,
+        1998338632572506116
+    )
+ON DUPLICATE KEY UPDATE
+    `title` = VALUES(`title`),
+    `difficulty` = VALUES(`difficulty`),
+    `statement_md` = VALUES(`statement_md`),
+    `time_limit_ms` = VALUES(`time_limit_ms`),
+    `memory_limit_kb` = VALUES(`memory_limit_kb`),
+    `status` = VALUES(`status`),
+    `submit_count` = VALUES(`submit_count`),
+    `accepted_count` = VALUES(`accepted_count`),
+    `is_deleted` = VALUES(`is_deleted`),
+    `updated_at` = CURRENT_TIMESTAMP,
+    `updated_by` = VALUES(`updated_by`);
+
+DELETE FROM `problem_tag`
+WHERE `problem_id` BETWEEN 2100000000000000001 AND 2100000000000000030;
+
+INSERT INTO `problem_tag` (`id`, `problem_id`, `tag_id`, `created_at`)
+VALUES
+    (2200000000000000001, 2100000000000000001, 2000000000000000001, CURRENT_TIMESTAMP),
+    (2200000000000000002, 2100000000000000001, 2000000000000000002, CURRENT_TIMESTAMP),
+    (2200000000000000003, 2100000000000000002, 2000000000000000003, CURRENT_TIMESTAMP),
+    (2200000000000000004, 2100000000000000002, 2000000000000000004, CURRENT_TIMESTAMP),
+    (2200000000000000005, 2100000000000000003, 2000000000000000003, CURRENT_TIMESTAMP),
+    (2200000000000000006, 2100000000000000003, 2000000000000000007, CURRENT_TIMESTAMP),
+    (2200000000000000007, 2100000000000000004, 2000000000000000018, CURRENT_TIMESTAMP),
+    (2200000000000000008, 2100000000000000004, 2000000000000000014, CURRENT_TIMESTAMP),
+    (2200000000000000009, 2100000000000000005, 2000000000000000001, CURRENT_TIMESTAMP),
+    (2200000000000000010, 2100000000000000005, 2000000000000000014, CURRENT_TIMESTAMP),
+    (2200000000000000011, 2100000000000000006, 2000000000000000019, CURRENT_TIMESTAMP),
+    (2200000000000000012, 2100000000000000006, 2000000000000000001, CURRENT_TIMESTAMP),
+    (2200000000000000013, 2100000000000000007, 2000000000000000005, CURRENT_TIMESTAMP),
+    (2200000000000000014, 2100000000000000007, 2000000000000000001, CURRENT_TIMESTAMP),
+    (2200000000000000015, 2100000000000000008, 2000000000000000006, CURRENT_TIMESTAMP),
+    (2200000000000000016, 2100000000000000008, 2000000000000000001, CURRENT_TIMESTAMP),
+    (2200000000000000017, 2100000000000000009, 2000000000000000018, CURRENT_TIMESTAMP),
+    (2200000000000000018, 2100000000000000009, 2000000000000000001, CURRENT_TIMESTAMP),
+    (2200000000000000019, 2100000000000000010, 2000000000000000006, CURRENT_TIMESTAMP),
+    (2200000000000000020, 2100000000000000010, 2000000000000000001, CURRENT_TIMESTAMP),
+    (2200000000000000021, 2100000000000000011, 2000000000000000007, CURRENT_TIMESTAMP),
+    (2200000000000000022, 2100000000000000011, 2000000000000000001, CURRENT_TIMESTAMP),
+    (2200000000000000023, 2100000000000000012, 2000000000000000008, CURRENT_TIMESTAMP),
+    (2200000000000000024, 2100000000000000012, 2000000000000000001, CURRENT_TIMESTAMP),
+    (2200000000000000025, 2100000000000000013, 2000000000000000009, CURRENT_TIMESTAMP),
+    (2200000000000000026, 2100000000000000013, 2000000000000000014, CURRENT_TIMESTAMP),
+    (2200000000000000027, 2100000000000000014, 2000000000000000010, CURRENT_TIMESTAMP),
+    (2200000000000000028, 2100000000000000014, 2000000000000000020, CURRENT_TIMESTAMP),
+    (2200000000000000029, 2100000000000000015, 2000000000000000010, CURRENT_TIMESTAMP),
+    (2200000000000000030, 2100000000000000015, 2000000000000000020, CURRENT_TIMESTAMP),
+    (2200000000000000031, 2100000000000000016, 2000000000000000011, CURRENT_TIMESTAMP),
+    (2200000000000000032, 2100000000000000016, 2000000000000000020, CURRENT_TIMESTAMP),
+    (2200000000000000033, 2100000000000000017, 2000000000000000011, CURRENT_TIMESTAMP),
+    (2200000000000000034, 2100000000000000017, 2000000000000000008, CURRENT_TIMESTAMP),
+    (2200000000000000035, 2100000000000000018, 2000000000000000010, CURRENT_TIMESTAMP),
+    (2200000000000000036, 2100000000000000018, 2000000000000000020, CURRENT_TIMESTAMP),
+    (2200000000000000037, 2100000000000000019, 2000000000000000010, CURRENT_TIMESTAMP),
+    (2200000000000000038, 2100000000000000019, 2000000000000000008, CURRENT_TIMESTAMP),
+    (2200000000000000039, 2100000000000000020, 2000000000000000017, CURRENT_TIMESTAMP),
+    (2200000000000000040, 2100000000000000020, 2000000000000000010, CURRENT_TIMESTAMP),
+    (2200000000000000041, 2100000000000000021, 2000000000000000012, CURRENT_TIMESTAMP),
+    (2200000000000000042, 2100000000000000021, 2000000000000000006, CURRENT_TIMESTAMP),
+    (2200000000000000043, 2100000000000000022, 2000000000000000012, CURRENT_TIMESTAMP),
+    (2200000000000000044, 2100000000000000022, 2000000000000000003, CURRENT_TIMESTAMP),
+    (2200000000000000045, 2100000000000000023, 2000000000000000012, CURRENT_TIMESTAMP),
+    (2200000000000000046, 2100000000000000023, 2000000000000000009, CURRENT_TIMESTAMP),
+    (2200000000000000047, 2100000000000000024, 2000000000000000012, CURRENT_TIMESTAMP),
+    (2200000000000000048, 2100000000000000024, 2000000000000000015, CURRENT_TIMESTAMP),
+    (2200000000000000049, 2100000000000000025, 2000000000000000012, CURRENT_TIMESTAMP),
+    (2200000000000000050, 2100000000000000025, 2000000000000000001, CURRENT_TIMESTAMP),
+    (2200000000000000051, 2100000000000000026, 2000000000000000013, CURRENT_TIMESTAMP),
+    (2200000000000000052, 2100000000000000026, 2000000000000000018, CURRENT_TIMESTAMP),
+    (2200000000000000053, 2100000000000000027, 2000000000000000016, CURRENT_TIMESTAMP),
+    (2200000000000000054, 2100000000000000027, 2000000000000000013, CURRENT_TIMESTAMP),
+    (2200000000000000055, 2100000000000000028, 2000000000000000003, CURRENT_TIMESTAMP),
+    (2200000000000000056, 2100000000000000028, 2000000000000000015, CURRENT_TIMESTAMP),
+    (2200000000000000057, 2100000000000000029, 2000000000000000007, CURRENT_TIMESTAMP),
+    (2200000000000000058, 2100000000000000029, 2000000000000000003, CURRENT_TIMESTAMP),
+    (2200000000000000059, 2100000000000000030, 2000000000000000016, CURRENT_TIMESTAMP),
+    (2200000000000000060, 2100000000000000030, 2000000000000000018, CURRENT_TIMESTAMP);
+
+
+-- ============================================================================
+-- Source: V1_6__seed_sample_submissions.sql
+-- ============================================================================
+
+INSERT INTO `submission` (
+    `id`, `user_id`, `problem_id`, `language`, `source_code`, `status`,
+    `time_ms`, `memory_kb`, `compile_message`, `judge_message`, `created_at`
+) VALUES
+    (
+        2300000000000000001,
+        1998338632572506117,
+        2100000000000000001,
+        'Java',
+        'import java.util.*;\n\npublic class Main {\n    public static void main(String[] args) {\n        Scanner scanner = new Scanner(System.in);\n        int n = scanner.nextInt();\n        int[] nums = new int[n];\n        for (int i = 0; i < n; i++) {\n            nums[i] = scanner.nextInt();\n        }\n        int target = scanner.nextInt();\n        Map<Integer, Integer> seen = new HashMap<>();\n        for (int i = 0; i < n; i++) {\n            int need = target - nums[i];\n            if (seen.containsKey(need)) {\n                System.out.println(seen.get(need) + \" \" + i);\n                return;\n            }\n            seen.put(nums[i], i);\n        }\n    }\n}',
+        'AC',
+        12,
+        256,
+        NULL,
+        '示例通过记录',
+        DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 2 DAY)
+    ),
+    (
+        2300000000000000002,
+        1998338632572506117,
+        2100000000000000002,
+        'Python3',
+        'def main():\n    print("not implemented")\n\nif __name__ == "__main__":\n    main()',
+        'WA',
+        8,
+        192,
+        NULL,
+        '示例错误答案记录',
+        DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 1 DAY)
+    )
+ON DUPLICATE KEY UPDATE
+    `status` = VALUES(`status`),
+    `source_code` = VALUES(`source_code`),
+    `time_ms` = VALUES(`time_ms`),
+    `memory_kb` = VALUES(`memory_kb`),
+    `judge_message` = VALUES(`judge_message`);
+
+
+-- ============================================================================
+-- Source: V1_7__init_problem_test_cases.sql
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS `problem_test_case` (
+    `id` BIGINT UNSIGNED NOT NULL COMMENT '主键，雪花 ID',
+    `problem_id` BIGINT UNSIGNED NOT NULL COMMENT '题目 ID',
+    `case_type` ENUM('SAMPLE','HIDDEN') NOT NULL COMMENT '测试用例类型',
+    `sort_order` INT NOT NULL DEFAULT 1 COMMENT '排序序号',
+    `input_text` LONGTEXT NOT NULL COMMENT '标准输入',
+    `expected_output` LONGTEXT NOT NULL COMMENT '期望输出',
+    `explanation` VARCHAR(500) DEFAULT NULL COMMENT '样例说明',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_problem_test_case_problem` (`problem_id`,`case_type`,`sort_order`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='题目测试用例';
+
+DELETE FROM `problem_test_case`
+WHERE `problem_id` IN (
+    2100000000000000001,
+    2100000000000000002,
+    2100000000000000003
+);
+
+INSERT INTO `problem_test_case` (
+    `id`, `problem_id`, `case_type`, `sort_order`,
+    `input_text`, `expected_output`, `explanation`,
+    `created_at`, `updated_at`
+) VALUES
+    (2300000000000000001, 2100000000000000001, 'SAMPLE', 1, '4\n2 7 11 15\n9', '0 1', '基础样例：答案位于数组前两个位置', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000002, 2100000000000000001, 'SAMPLE', 2, '3\n3 2 4\n6', '1 2', '基础样例：答案位于数组后两位', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000003, 2100000000000000001, 'HIDDEN', 1, '5\n-3 4 8 10 -1\n7', '0 2', '隐藏测试：含负数', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000004, 2100000000000000002, 'SAMPLE', 1, 'abcabcbb', '3', '最长不重复子串为 abc', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000005, 2100000000000000002, 'SAMPLE', 2, 'bbbbb', '1', '所有字符都相同', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000006, 2100000000000000002, 'HIDDEN', 1, 'pwwkew', '3', '隐藏测试：答案不一定连续取末端', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000007, 2100000000000000003, 'SAMPLE', 1, '{[()()]}', 'YES', '完整匹配的括号序列', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000008, 2100000000000000003, 'SAMPLE', 2, '([)]', 'NO', '交叉匹配非法', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000009, 2100000000000000003, 'HIDDEN', 1, '(((())))', 'YES', '隐藏测试：单类型深层嵌套', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+
+-- ============================================================================
+-- Source: V1_8__fix_two_sum_hidden_case.sql
+-- ============================================================================
+
+UPDATE `problem_test_case`
+SET
+    `input_text` = '5\n1 4 6 8 10\n9',
+    `expected_output` = '0 3',
+    `explanation` = '隐藏测试：保证只有一组有效答案'
+WHERE `id` = 2300000000000000003;
+
+
+-- ============================================================================
+-- Source: V1_9__seed_remaining_problem_test_cases.sql
+-- ============================================================================
+
+INSERT INTO `problem_test_case` (
+    `id`, `problem_id`, `case_type`, `sort_order`,
+    `input_text`, `expected_output`, `explanation`,
+    `created_at`, `updated_at`
+) VALUES
+    (2300000000000000010, 2100000000000000004, 'SAMPLE', 1, '4\n1 3\n2 6\n8 10\n15 18\n', '3\n1 6\n8 10\n15 18', 'sample', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000011, 2100000000000000004, 'HIDDEN', 1, '3\n1 4\n4 5\n10 11\n', '2\n1 5\n10 11', 'touching intervals', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000012, 2100000000000000005, 'SAMPLE', 1, '7 3\n1 2 3 4 5 6 7\n', '5 6 7 1 2 3 4', 'sample', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000013, 2100000000000000005, 'HIDDEN', 1, '5 0\n9 8 7 6 5\n', '9 8 7 6 5', 'zero rotation', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000014, 2100000000000000006, 'SAMPLE', 1, '5 3\n1 2 3 4 5\n1 3 2\n2 5 -1\n4 4 7\n', '3 3 4 10 4', 'sample', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000015, 2100000000000000006, 'HIDDEN', 1, '3 2\n0 0 0\n1 3 5\n2 2 -2\n', '5 3 5', 'overlapping updates', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000016, 2100000000000000007, 'SAMPLE', 1, '5 3\n1 2 3 4 5\n1 3\n2 4\n3 5\n', '6\n9\n12', 'sample', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000017, 2100000000000000007, 'HIDDEN', 1, '4 2\n5 -1 2 8\n2 4\n1 1\n', '9\n5', 'negative value query', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000018, 2100000000000000008, 'SAMPLE', 1, '6 5\n1 3 5 5 7 9\n', '2', 'sample', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000019, 2100000000000000008, 'HIDDEN', 1, '4 10\n1 2 3 4\n', '-1', 'not found', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000020, 2100000000000000009, 'SAMPLE', 1, '8\n5 3 5 2 2 9 1 3\n', '1 2 3 5 9', 'sample', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000021, 2100000000000000009, 'HIDDEN', 1, '5\n-1 -1 0 2 2\n', '-1 0 2', 'negative values', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000022, 2100000000000000010, 'SAMPLE', 1, '5\n4 5 1 2 3\n', '1', 'sample', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000023, 2100000000000000010, 'HIDDEN', 1, '3\n2 3 1\n', '1', 'short rotated array', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000024, 2100000000000000011, 'SAMPLE', 1, '5\n2 1 2 4 3\n', '4 2 4 -1 -1', 'sample', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000025, 2100000000000000011, 'HIDDEN', 1, '4\n4 3 2 1\n', '-1 -1 -1 -1', 'descending array', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000026, 2100000000000000012, 'SAMPLE', 1, '8 3\n1 3 -1 -3 5 3 6 7\n', '3 3 5 5 6 7', 'sample', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000027, 2100000000000000012, 'HIDDEN', 1, '5 2\n9 1 8 2 7\n', '9 8 8 7', 'window size two', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000028, 2100000000000000013, 'SAMPLE', 1, '3 3\n1 2 3\n4 5 6\n7 8 9\n', '1 2 3 6 9 8 7 4 5', 'sample', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000029, 2100000000000000013, 'HIDDEN', 1, '2 3\n1 2 3\n4 5 6\n', '1 2 3 6 5 4', 'rectangular matrix', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000030, 2100000000000000014, 'SAMPLE', 1, '4 5\n11000\n11010\n00101\n00111\n', '3', 'sample', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000031, 2100000000000000014, 'HIDDEN', 1, '3 3\n100\n010\n001\n', '3', 'diagonal cells are disconnected', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000032, 2100000000000000015, 'SAMPLE', 1, '3 4\n0 0 0 1\n1 1 0 1\n0 0 0 0\n', '5', 'sample', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000033, 2100000000000000015, 'HIDDEN', 1, '2 2\n0 0\n0 0\n', '2', 'small open grid', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000034, 2100000000000000016, 'SAMPLE', 1, '7\n3 9 20 null null 15 7\n', '3', 'sample', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000035, 2100000000000000016, 'HIDDEN', 1, '3\n1 null 2\n', '2', 'right child only', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000036, 2100000000000000017, 'SAMPLE', 1, '7\n3 9 20 null null 15 7\n', '3\n3\n9 20\n15 7', 'sample', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000037, 2100000000000000017, 'HIDDEN', 1, '3\n1 2 3\n', '2\n1\n2 3', 'two levels', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000038, 2100000000000000018, 'SAMPLE', 1, '6 3\n1 2\n2 3\n5 6\n', '3', 'sample', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000039, 2100000000000000018, 'HIDDEN', 1, '4 2\n1 2\n3 4\n', '2', 'two components', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000040, 2100000000000000019, 'SAMPLE', 1, '4 3\n1 2\n1 3\n3 4\n', '1 2 3 4', 'sample', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000041, 2100000000000000019, 'HIDDEN', 1, '3 2\n1 2\n2 3\n', '1 2 3', 'unique chain order', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000042, 2100000000000000020, 'SAMPLE', 1, '5 5\n1 1 2\n1 3 4\n2 1 3\n1 2 3\n2 1 4\n', 'NO\nYES', 'sample', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000043, 2100000000000000020, 'HIDDEN', 1, '3 3\n1 1 2\n2 1 2\n2 2 3\n', 'YES\nNO', 'simple connectivity queries', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000044, 2100000000000000021, 'SAMPLE', 1, '8\n10 9 2 5 3 7 101 18\n', '4', 'sample', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000045, 2100000000000000021, 'HIDDEN', 1, '5\n5 4 3 2 1\n', '1', 'descending sequence', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000046, 2100000000000000022, 'SAMPLE', 1, 'abcde\nace\n', '3', 'sample', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000047, 2100000000000000022, 'HIDDEN', 1, 'abc\ndef\n', '0', 'no common subsequence', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000048, 2100000000000000023, 'SAMPLE', 1, '3 3\n1 3 1\n1 5 1\n4 2 1\n', '7', 'sample', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000049, 2100000000000000023, 'HIDDEN', 1, '2 2\n1 2\n3 4\n', '7', 'small grid', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000050, 2100000000000000024, 'SAMPLE', 1, '3 11\n1 2 5\n', '3', 'sample', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000051, 2100000000000000024, 'HIDDEN', 1, '2 3\n2 4\n', '-1', 'unreachable amount', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000052, 2100000000000000025, 'SAMPLE', 1, '4 5\n1 2\n2 4\n3 4\n4 5\n', '8', 'sample', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000053, 2100000000000000025, 'HIDDEN', 1, '3 4\n2 3\n3 4\n4 5\n', '5', 'single best item', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000054, 2100000000000000026, 'SAMPLE', 1, '5\n1 2\n2 3\n3 4\n1 3\n2 5\n', '3', 'sample', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000055, 2100000000000000026, 'HIDDEN', 1, '3\n1 10\n2 3\n3 4\n', '2', 'skip long meeting', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000056, 2100000000000000027, 'SAMPLE', 1, '4\n1 2 9 10\n', '34', 'sample', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000057, 2100000000000000027, 'HIDDEN', 1, '3\n1 2 3\n', '9', 'three piles', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000058, 2100000000000000028, 'SAMPLE', 1, '987654321987654321\n123456789123456789\n', '1111111111111111110', 'sample', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000059, 2100000000000000028, 'HIDDEN', 1, '999\n1\n', '1000', 'carry chain', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000060, 2100000000000000029, 'SAMPLE', 1, '(2+3)*4-10/5\n', '18', 'sample', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000061, 2100000000000000029, 'HIDDEN', 1, '2*(3+4)\n', '14', 'parentheses', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000062, 2100000000000000030, 'SAMPLE', 1, '7 3\n5 1 9 3 2 8 2\n', '1 2 2', 'sample', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2300000000000000063, 2100000000000000030, 'HIDDEN', 1, '5 4\n4 1 3 2 5\n', '1 2 3 4', 'larger k', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON DUPLICATE KEY UPDATE
+    `input_text` = VALUES(`input_text`),
+    `expected_output` = VALUES(`expected_output`),
+    `explanation` = VALUES(`explanation`),
+    `updated_at` = CURRENT_TIMESTAMP;
+
+
+-- ============================================================================
+-- Source: V1_10__clean_user_seed_data.sql
+-- ============================================================================
+
+SET @admin_id := 1998338632572506113;
+SET @admin1_id := 1998338632572506114;
+SET @user_id := 1998338632572506117;
+SET @user1_id := 1998338632572506121;
+SET @role_user_id := 1000000000000000100;
+SET @role_admin_id := 1000000000000000104;
+
+-- Keep only the four demo accounts requested by product.
+DELETE FROM `class_user`
+WHERE `user_id` NOT IN (@admin_id, @admin1_id, @user_id, @user1_id);
+
+UPDATE `class_user`
+SET `reviewer_id` = @admin1_id
+WHERE `reviewer_id` = 1998338632572506116;
+
+UPDATE `class_user`
+SET `reviewer_id` = @admin_id
+WHERE `reviewer_id` = 1998338632572506120;
+
+DELETE FROM `class_user`
+WHERE `reviewer_id` IS NOT NULL
+  AND `reviewer_id` NOT IN (@admin_id, @admin1_id, @user_id, @user1_id);
+
+UPDATE `class`
+SET `teacher_id` = @admin1_id
+WHERE `teacher_id` = 1998338632572506116;
+
+UPDATE `class`
+SET `teacher_id` = @admin_id
+WHERE `teacher_id` = 1998338632572506120;
+
+UPDATE `class`
+SET `teacher_id` = NULL
+WHERE `teacher_id` IS NOT NULL
+  AND `teacher_id` NOT IN (@admin_id, @admin1_id, @user_id, @user1_id);
+
+DELETE FROM `class_teacher`;
+
+INSERT INTO `class_teacher` (`id`, `class_id`, `teacher_id`, `role`, `created_at`)
+VALUES
+    (1998338632572507401, 1998338632572507201, @admin1_id, '班主任', CURRENT_TIMESTAMP),
+    (1998338632572507402, 1998338632572507202, @admin_id, '班主任', CURRENT_TIMESTAMP),
+    (1998338632572507403, 1998338632572507206, @admin1_id, '助教', CURRENT_TIMESTAMP),
+    (1998338632572507404, 1998338632572507210, @admin_id, '助教', CURRENT_TIMESTAMP)
+ON DUPLICATE KEY UPDATE
+    `class_id` = VALUES(`class_id`),
+    `teacher_id` = VALUES(`teacher_id`),
+    `role` = VALUES(`role`);
+
+DELETE FROM `submission`
+WHERE `user_id` NOT IN (@admin_id, @admin1_id, @user_id, @user1_id);
+
+DELETE FROM `user_problem_progress`
+WHERE `user_id` NOT IN (@admin_id, @admin1_id, @user_id, @user1_id);
+
+DELETE FROM `user_role`;
+
+DELETE FROM `user_profile`
+WHERE `user_id` NOT IN (@admin_id, @admin1_id, @user_id, @user1_id);
+
+DELETE FROM `user`
+WHERE `email` IN ('admin@qq.com', 'admin1@qq.com', 'user@qq.com', 'user1@qq.com')
+  AND `id` NOT IN (@admin_id, @admin1_id, @user_id, @user1_id);
+
+DELETE FROM `user`
+WHERE `id` NOT IN (@admin_id, @admin1_id, @user_id, @user1_id);
+
+INSERT INTO `user`
+(`id`, `username`, `email`, `phone`, `avatar`, `password`, `status`, `role_type`, `is_deleted`, `created_at`, `updated_at`, `created_by`, `updated_by`)
+VALUES
+    (@admin_id, 'admin', 'admin@qq.com', '13800000001', '/avatars/admin.svg', '$2a$10$gZZ88Afdd4RAIp/XU8xBZuE7xOquiUhkJ7bnJLSjDKoBXBszFk/Pq', 1, 'ADMIN', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0, 0),
+    (@admin1_id, 'admin1', 'admin1@qq.com', '13800000002', '/avatars/admin1.svg', '$2a$10$gZZ88Afdd4RAIp/XU8xBZuE7xOquiUhkJ7bnJLSjDKoBXBszFk/Pq', 1, 'ADMIN', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0, 0),
+    (@user_id, 'user', 'user@qq.com', '13800000003', '/avatars/user.svg', '$2a$10$gZZ88Afdd4RAIp/XU8xBZuE7xOquiUhkJ7bnJLSjDKoBXBszFk/Pq', 1, 'USER', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0, 0),
+    (@user1_id, 'user1', 'user1@qq.com', '13800000004', '/avatars/user1.svg', '$2a$10$gZZ88Afdd4RAIp/XU8xBZuE7xOquiUhkJ7bnJLSjDKoBXBszFk/Pq', 1, 'USER', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0, 0)
+ON DUPLICATE KEY UPDATE
+    `username` = VALUES(`username`),
+    `email` = VALUES(`email`),
+    `phone` = VALUES(`phone`),
+    `avatar` = VALUES(`avatar`),
+    `password` = VALUES(`password`),
+    `status` = VALUES(`status`),
+    `role_type` = VALUES(`role_type`),
+    `is_deleted` = VALUES(`is_deleted`),
+    `updated_at` = CURRENT_TIMESTAMP,
+    `updated_by` = VALUES(`updated_by`);
+
+INSERT INTO `user_role` (`id`, `user_id`, `role_id`, `bind_source`, `created_at`, `updated_at`)
+VALUES
+    (1998338632572508001, @admin_id, @role_admin_id, 'SYSTEM_USER_SEED_CLEANUP', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572508002, @admin1_id, @role_admin_id, 'SYSTEM_USER_SEED_CLEANUP', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572508003, @user_id, @role_user_id, 'SYSTEM_USER_SEED_CLEANUP', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572508004, @user1_id, @role_user_id, 'SYSTEM_USER_SEED_CLEANUP', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON DUPLICATE KEY UPDATE
+    `role_id` = VALUES(`role_id`),
+    `bind_source` = VALUES(`bind_source`),
+    `updated_at` = CURRENT_TIMESTAMP;
+
+INSERT INTO `user_profile`
+(`id`, `user_id`, `gender`, `birthday`, `address`, `github`, `company`, `position`, `skills`, `student_no`, `school_id`, `bio`, `tags`, `identity_status`, `created_at`, `updated_at`)
+VALUES
+    (1998338632572506200, @admin_id, 1, '1990-01-01', '北京市海淀区', 'admin', 'OJPT', '平台管理员', 'Java,Spring Boot,MySQL', 'A0001', 1998338632572507001, '负责平台日常维护', 'admin,ops', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572506201, @admin1_id, 2, '1992-02-02', '上海市浦东新区', 'admin1', 'OJPT', '系统管理员', 'Vue,TypeScript,测试', 'A0002', 1998338632572507005, '负责内容和用户管理', 'admin,content', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572506204, @user_id, 1, '2002-03-03', '浙江省杭州市', 'user', NULL, '学生', 'Java,算法基础', '2024001', 1998338632572507004, '算法练习用户', 'student,algorithm', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1998338632572506208, @user1_id, 2, '2003-04-04', '江苏省南京市', 'user1', NULL, '学生', 'Python,数据结构', '2024002', 1998338632572507001, '数据结构练习用户', 'student,python', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON DUPLICATE KEY UPDATE
+    `gender` = VALUES(`gender`),
+    `birthday` = VALUES(`birthday`),
+    `address` = VALUES(`address`),
+    `github` = VALUES(`github`),
+    `company` = VALUES(`company`),
+    `position` = VALUES(`position`),
+    `skills` = VALUES(`skills`),
+    `student_no` = VALUES(`student_no`),
+    `school_id` = VALUES(`school_id`),
+    `bio` = VALUES(`bio`),
+    `tags` = VALUES(`tags`),
+    `identity_status` = VALUES(`identity_status`),
+    `updated_at` = CURRENT_TIMESTAMP;
+
+DELETE FROM `class_user`
+WHERE `id` NOT IN (
+    1998338632572507301,
+    1998338632572507302,
+    1998338632572507303,
+    1998338632572507304,
+    1998338632572507305,
+    1998338632572507306
+);
+
+INSERT INTO `class_user` (`id`, `class_id`, `user_id`, `join_type`, `join_status`, `join_at`, `reviewer_id`, `review_at`, `review_comment`)
+VALUES
+    (1998338632572507301, 1998338632572507201, @user_id, 'APPLY', 'APPROVED', CURRENT_TIMESTAMP, @admin1_id, CURRENT_TIMESTAMP, '审核通过'),
+    (1998338632572507302, 1998338632572507203, @user_id, 'APPLY', 'APPROVED', CURRENT_TIMESTAMP, @admin1_id, CURRENT_TIMESTAMP, NULL),
+    (1998338632572507303, 1998338632572507202, @user_id, 'APPLY', 'PENDING', NULL, NULL, NULL, NULL),
+    (1998338632572507304, 1998338632572507201, @user1_id, 'INVITE', 'APPROVED', CURRENT_TIMESTAMP, @admin_id, CURRENT_TIMESTAMP, '邀请加入'),
+    (1998338632572507305, 1998338632572507202, @user1_id, 'APPLY', 'REJECTED', NULL, @admin_id, CURRENT_TIMESTAMP, '班级已满'),
+    (1998338632572507306, 1998338632572507204, @user1_id, 'APPLY', 'PENDING', NULL, NULL, NULL, NULL)
+ON DUPLICATE KEY UPDATE
+    `class_id` = VALUES(`class_id`),
+    `user_id` = VALUES(`user_id`),
+    `join_type` = VALUES(`join_type`),
+    `join_status` = VALUES(`join_status`),
+    `join_at` = VALUES(`join_at`),
+    `reviewer_id` = VALUES(`reviewer_id`),
+    `review_at` = VALUES(`review_at`),
+    `review_comment` = VALUES(`review_comment`);
+
+
+-- ============================================================================
+-- Source: V1_11__normalize_problem_audit_users.sql
+-- ============================================================================
+
+SET @admin_id := 1998338632572506113;
+SET @admin1_id := 1998338632572506114;
+SET @user_id := 1998338632572506117;
+SET @user1_id := 1998338632572506121;
+
+UPDATE `problem`
+SET `created_by` = @admin_id
+WHERE `created_by` IS NOT NULL
+  AND `created_by` NOT IN (@admin_id, @admin1_id, @user_id, @user1_id);
+
+UPDATE `problem`
+SET `updated_by` = @admin_id
+WHERE `updated_by` IS NOT NULL
+  AND `updated_by` NOT IN (@admin_id, @admin1_id, @user_id, @user1_id);
+
+
+-- ============================================================================
+-- Source: V1_12__init_submission_case_result.sql
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS `submission_case_result` (
+    `id` BIGINT UNSIGNED NOT NULL COMMENT '主键，雪花 ID',
+    `submission_id` BIGINT UNSIGNED NOT NULL COMMENT '提交 ID',
+    `case_type` ENUM('SAMPLE','HIDDEN','CUSTOM') NOT NULL COMMENT '用例类型',
+    `case_index` INT NOT NULL COMMENT '本次提交中的用例序号',
+    `input_text` LONGTEXT NOT NULL COMMENT '输入',
+    `expected_output` LONGTEXT NOT NULL COMMENT '期望输出',
+    `actual_output` LONGTEXT DEFAULT NULL COMMENT '实际输出',
+    `error_output` LONGTEXT DEFAULT NULL COMMENT '错误输出',
+    `status` ENUM('AC','WA','TLE','MLE','RE','CE','SYSTEM_ERROR') NOT NULL COMMENT '用例结果',
+    `time_ms` INT DEFAULT NULL COMMENT '用例运行时间',
+    `message` VARCHAR(500) DEFAULT NULL COMMENT '用例结果说明',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_submission_case_result_submission` (`submission_id`,`case_index`),
+    KEY `idx_submission_case_result_status` (`submission_id`,`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='提交用例运行结果';
+
+
+-- ============================================================================
+-- Source: V1_13__init_problem_code_draft.sql
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS `problem_code_draft` (
+    `id` BIGINT UNSIGNED NOT NULL COMMENT '主键，雪花 ID',
+    `user_id` BIGINT UNSIGNED NOT NULL COMMENT '用户 ID',
+    `problem_id` BIGINT UNSIGNED NOT NULL COMMENT '题目 ID',
+    `language` VARCHAR(32) NOT NULL COMMENT '编程语言',
+    `source_code` LONGTEXT NOT NULL COMMENT '草稿代码',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_problem_code_draft_user_problem_lang` (`user_id`,`problem_id`,`language`),
+    KEY `idx_problem_code_draft_problem` (`problem_id`,`updated_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户题目代码草稿';
+
+
+-- ============================================================================
+-- Source: V1_14__seed_more_hidden_problem_test_cases.sql
+-- ============================================================================
+
+INSERT INTO `problem_test_case` (
+    `id`, `problem_id`, `case_type`, `sort_order`,
+    `input_text`, `expected_output`, `explanation`,
+    `created_at`, `updated_at`
+) VALUES
+    (2400000000000000001, 2100000000000000001, 'HIDDEN', 2, '2\n1 9\n10', '0 1', 'two sum minimal array', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000002, 2100000000000000001, 'HIDDEN', 3, '4\n3 3 4 5\n6', '0 1', 'two sum duplicate values', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000003, 2100000000000000001, 'HIDDEN', 4, '6\n-10 -20 30 40 5 15\n20', '4 5', 'two sum positive answer after negatives', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000004, 2100000000000000001, 'HIDDEN', 5, '5\n0 4 3 0 8\n0', '0 3', 'two sum zero target', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000005, 2100000000000000001, 'HIDDEN', 6, '7\n1000000000 -1000000000 7 11 13 17 19\n0', '0 1', 'two sum large opposite values', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000006, 2100000000000000001, 'HIDDEN', 7, '6\n1 2 3 4 5 6\n11', '4 5', 'two sum answer at tail', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000007, 2100000000000000001, 'HIDDEN', 8, '4\n-5 -2 -3 -4\n-8', '0 2', 'two sum all negative values', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000008, 2100000000000000001, 'HIDDEN', 9, '8\n14 1 9 7 3 11 5 6\n4', '1 4', 'two sum mixed unordered values', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000009, 2100000000000000001, 'HIDDEN', 10, '10\n2 4 6 8 10 12 14 16 18 20\n38', '8 9', 'two sum larger even sequence', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000010, 2100000000000000002, 'HIDDEN', 2, 'au', '2', 'longest substring two distinct chars', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000011, 2100000000000000002, 'HIDDEN', 3, 'dvdf', '3', 'longest substring repeat before window', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000012, 2100000000000000002, 'HIDDEN', 4, 'abba', '2', 'longest substring repeated middle pair', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000013, 2100000000000000002, 'HIDDEN', 5, 'tmmzuxt', '5', 'longest substring after early repeat', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000014, 2100000000000000002, 'HIDDEN', 6, 'abcdef', '6', 'longest substring all unique', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000015, 2100000000000000002, 'HIDDEN', 7, 'anviaj', '5', 'longest substring late repeat', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000016, 2100000000000000002, 'HIDDEN', 8, 'abcadeafgh', '6', 'longest substring after multiple resets', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000017, 2100000000000000002, 'HIDDEN', 9, 'zzzzzy', '2', 'longest substring mostly same char', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000018, 2100000000000000002, 'HIDDEN', 10, 'pwwkewxyz', '6', 'longest substring extends after classic case', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000019, 2100000000000000003, 'HIDDEN', 2, '()', 'YES', 'valid parentheses single pair', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000020, 2100000000000000003, 'HIDDEN', 3, '([{}])', 'YES', 'valid parentheses nested mixed types', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000021, 2100000000000000003, 'HIDDEN', 4, '(((', 'NO', 'valid parentheses missing closing brackets', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000022, 2100000000000000003, 'HIDDEN', 5, '())', 'NO', 'valid parentheses extra closing bracket', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000023, 2100000000000000003, 'HIDDEN', 6, '{[()]}', 'YES', 'valid parentheses balanced braces and brackets', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000024, 2100000000000000003, 'HIDDEN', 7, '{[(])}', 'NO', 'valid parentheses crossed nesting', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000025, 2100000000000000003, 'HIDDEN', 8, '[]{}()', 'YES', 'valid parentheses adjacent groups', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000026, 2100000000000000003, 'HIDDEN', 9, '([{}]){}[]', 'YES', 'valid parentheses nested then adjacent groups', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000027, 2100000000000000003, 'HIDDEN', 10, '][', 'NO', 'valid parentheses starts with closing bracket', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000028, 2100000000000000004, 'HIDDEN', 2, '1\n5 7\n', '1\n5 7', 'merge intervals single interval', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000029, 2100000000000000004, 'HIDDEN', 3, '3\n1 2\n4 5\n7 8\n', '3\n1 2\n4 5\n7 8', 'merge intervals disjoint intervals', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000030, 2100000000000000004, 'HIDDEN', 4, '3\n1 10\n2 3\n4 8\n', '1\n1 10', 'merge intervals contained intervals', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000031, 2100000000000000004, 'HIDDEN', 5, '3\n5 6\n1 2\n2 5\n', '1\n1 6', 'merge intervals unsorted touching chain', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000032, 2100000000000000004, 'HIDDEN', 6, '3\n-10 -5\n-7 -3\n0 1\n', '2\n-10 -3\n0 1', 'merge intervals negative ranges', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000033, 2100000000000000004, 'HIDDEN', 7, '2\n1 4\n1 4\n', '1\n1 4', 'merge intervals duplicate intervals', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000034, 2100000000000000004, 'HIDDEN', 8, '3\n1 10\n2 5\n6 7\n', '1\n1 10', 'merge intervals multiple contained ranges', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000035, 2100000000000000004, 'HIDDEN', 9, '3\n1 2\n2 3\n3 4\n', '1\n1 4', 'merge intervals endpoints touch', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000036, 2100000000000000004, 'HIDDEN', 10, '5\n1 3\n6 9\n2 4\n10 12\n8 10\n', '2\n1 4\n6 12', 'merge intervals mixed overlap groups', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000037, 2100000000000000005, 'HIDDEN', 2, '1 5\n42\n', '42', 'rotate array single element', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000038, 2100000000000000005, 'HIDDEN', 3, '5 5\n1 2 3 4 5\n', '1 2 3 4 5', 'rotate array full length', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000039, 2100000000000000005, 'HIDDEN', 4, '5 7\n1 2 3 4 5\n', '4 5 1 2 3', 'rotate array k greater than n', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000040, 2100000000000000005, 'HIDDEN', 5, '4 1\n1 2 3 4\n', '4 1 2 3', 'rotate array one step', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000041, 2100000000000000005, 'HIDDEN', 6, '4 3\n1 2 3 4\n', '2 3 4 1', 'rotate array n minus one steps', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000042, 2100000000000000005, 'HIDDEN', 7, '6 10\n1 2 3 4 5 6\n', '3 4 5 6 1 2', 'rotate array large k remainder', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000043, 2100000000000000005, 'HIDDEN', 8, '3 2\n-3 -2 -1\n', '-2 -1 -3', 'rotate array negative values', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000044, 2100000000000000005, 'HIDDEN', 9, '8 4\n1 2 3 4 5 6 7 8\n', '5 6 7 8 1 2 3 4', 'rotate array half length', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000045, 2100000000000000005, 'HIDDEN', 10, '5 12\n10 20 30 40 50\n', '40 50 10 20 30', 'rotate array repeated cycles', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000046, 2100000000000000006, 'HIDDEN', 2, '1 1\n5\n1 1 3\n', '8', 'range update single element', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000047, 2100000000000000006, 'HIDDEN', 3, '3 1\n1 1 1\n1 3 2\n', '3 3 3', 'range update full range once', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000048, 2100000000000000006, 'HIDDEN', 4, '4 2\n0 0 0 0\n1 2 5\n3 4 7\n', '5 5 7 7', 'range update disjoint ranges', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000049, 2100000000000000006, 'HIDDEN', 5, '5 2\n10 10 10 10 10\n2 4 -3\n1 5 1\n', '11 8 8 8 11', 'range update negative then full range', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000050, 2100000000000000006, 'HIDDEN', 6, '5 3\n1 2 3 4 5\n1 1 -1\n5 5 5\n2 4 2\n', '0 4 5 6 10', 'range update endpoints and middle', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000051, 2100000000000000006, 'HIDDEN', 7, '3 2\n-1 -2 -3\n1 3 -2\n2 2 5\n', '-3 1 -5', 'range update negative base values', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000052, 2100000000000000006, 'HIDDEN', 8, '6 1\n1 2 3 4 5 6\n4 4 10\n', '1 2 3 14 5 6', 'range update single middle position', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000053, 2100000000000000006, 'HIDDEN', 9, '4 3\n0 1 0 1\n2 3 1\n1 4 -1\n3 4 2\n', '-1 1 2 2', 'range update overlapping mixed signs', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000054, 2100000000000000006, 'HIDDEN', 10, '7 2\n5 5 5 5 5 5 5\n1 7 5\n3 5 -10\n', '10 10 0 0 0 10 10', 'range update full range with center rollback', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000055, 2100000000000000007, 'HIDDEN', 2, '1 2\n5\n1 1\n1 1\n', '5\n5', 'range sum repeated single element', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000056, 2100000000000000007, 'HIDDEN', 3, '4 3\n1 2 3 4\n1 4\n2 3\n4 4\n', '10\n5\n4', 'range sum whole middle and tail', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000057, 2100000000000000007, 'HIDDEN', 4, '5 3\n-1 2 -3 4 -5\n1 5\n2 4\n3 3\n', '-3\n3\n-3', 'range sum mixed signs', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000058, 2100000000000000007, 'HIDDEN', 5, '6 2\n0 0 0 0 0 0\n1 6\n3 5\n', '0\n0', 'range sum all zero values', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000059, 2100000000000000007, 'HIDDEN', 6, '3 2\n1000000000 1000000000 -1000000000\n1 2\n1 3\n', '2000000000\n1000000000', 'range sum large values', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000060, 2100000000000000007, 'HIDDEN', 7, '5 1\n5 4 3 2 1\n2 5\n', '10', 'range sum descending suffix', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000061, 2100000000000000007, 'HIDDEN', 8, '7 4\n1 2 3 4 5 6 7\n1 1\n7 7\n3 6\n1 7\n', '1\n7\n18\n28', 'range sum endpoint and full queries', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000062, 2100000000000000007, 'HIDDEN', 9, '4 2\n-5 -5 -5 -5\n1 2\n2 4\n', '-10\n-15', 'range sum all negative values', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000063, 2100000000000000007, 'HIDDEN', 10, '8 3\n2 4 6 8 10 12 14 16\n2 7\n5 8\n1 8\n', '54\n52\n72', 'range sum even sequence queries', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000064, 2100000000000000008, 'HIDDEN', 2, '1 5\n5\n', '0', 'binary search single found', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000065, 2100000000000000008, 'HIDDEN', 3, '1 4\n5\n', '-1', 'binary search single not found', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000066, 2100000000000000008, 'HIDDEN', 4, '5 1\n1 1 1 1 1\n', '0', 'binary search all duplicates', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000067, 2100000000000000008, 'HIDDEN', 5, '5 3\n1 2 3 4 5\n', '2', 'binary search middle value', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000068, 2100000000000000008, 'HIDDEN', 6, '5 5\n1 2 3 4 5\n', '4', 'binary search last value', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000069, 2100000000000000008, 'HIDDEN', 7, '6 2\n1 2 2 2 3 4\n', '1', 'binary search first duplicate index', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000070, 2100000000000000008, 'HIDDEN', 8, '6 0\n-3 -1 0 0 2 4\n', '2', 'binary search zero with duplicates', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000071, 2100000000000000008, 'HIDDEN', 9, '4 -5\n-5 -2 0 2\n', '0', 'binary search first negative value', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000072, 2100000000000000008, 'HIDDEN', 10, '7 8\n1 3 5 7 9 11 13\n', '-1', 'binary search gap not found', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000073, 2100000000000000009, 'HIDDEN', 2, '1\n5\n', '5', 'unique sorted single value', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000074, 2100000000000000009, 'HIDDEN', 3, '5\n1 1 1 1 1\n', '1', 'unique sorted all same values', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000075, 2100000000000000009, 'HIDDEN', 4, '6\n1 2 3 4 5 6\n', '1 2 3 4 5 6', 'unique sorted already unique', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000076, 2100000000000000009, 'HIDDEN', 5, '6\n3 2 1 2 3 1\n', '1 2 3', 'unique sorted unsorted duplicates', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000077, 2100000000000000009, 'HIDDEN', 6, '5\n-3 -1 -3 0 -1\n', '-3 -1 0', 'unique sorted negative values', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000078, 2100000000000000009, 'HIDDEN', 7, '3\n0 0 0\n', '0', 'unique sorted all zero values', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000079, 2100000000000000009, 'HIDDEN', 8, '4\n1000000000 -1000000000 0 1000000000\n', '-1000000000 0 1000000000', 'unique sorted large values', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000080, 2100000000000000009, 'HIDDEN', 9, '8\n4 4 2 2 1 1 3 3\n', '1 2 3 4', 'unique sorted paired duplicates', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000081, 2100000000000000009, 'HIDDEN', 10, '10\n10 9 8 7 6 5 4 3 2 1\n', '1 2 3 4 5 6 7 8 9 10', 'unique sorted descending input', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000082, 2100000000000000010, 'HIDDEN', 2, '1\n7\n', '7', 'rotated minimum single element', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000083, 2100000000000000010, 'HIDDEN', 3, '5\n1 2 3 4 5\n', '1', 'rotated minimum not rotated', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000084, 2100000000000000010, 'HIDDEN', 4, '5\n5 1 2 3 4\n', '1', 'rotated minimum pivot near start', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000085, 2100000000000000010, 'HIDDEN', 5, '5\n2 3 4 5 1\n', '1', 'rotated minimum pivot at tail', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000086, 2100000000000000010, 'HIDDEN', 6, '4\n3 4 1 2\n', '1', 'rotated minimum even length', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000087, 2100000000000000010, 'HIDDEN', 7, '6\n10 11 12 1 2 3\n', '1', 'rotated minimum larger values', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000088, 2100000000000000010, 'HIDDEN', 8, '3\n-1 0 -2\n', '-2', 'rotated minimum negative values', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000089, 2100000000000000010, 'HIDDEN', 9, '5\n4 5 6 7 0\n', '0', 'rotated minimum zero at tail', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000090, 2100000000000000010, 'HIDDEN', 10, '8\n30 40 50 60 70 5 10 20\n', '5', 'rotated minimum longer array', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000091, 2100000000000000011, 'HIDDEN', 2, '1\n5\n', '-1', 'next greater single element', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000092, 2100000000000000011, 'HIDDEN', 3, '5\n1 2 3 4 5\n', '2 3 4 5 -1', 'next greater increasing array', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000093, 2100000000000000011, 'HIDDEN', 4, '5\n5 4 3 2 1\n', '-1 -1 -1 -1 -1', 'next greater descending array', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000094, 2100000000000000011, 'HIDDEN', 5, '4\n2 1 2 4\n', '4 2 4 -1', 'next greater duplicate before larger', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000095, 2100000000000000011, 'HIDDEN', 6, '5\n1 3 2 4 1\n', '3 4 4 -1 -1', 'next greater mixed peaks', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000096, 2100000000000000011, 'HIDDEN', 7, '4\n-2 -1 -3 0\n', '-1 0 0 -1', 'next greater negative values', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000097, 2100000000000000011, 'HIDDEN', 8, '6\n2 7 3 5 4 6\n', '7 -1 5 6 6 -1', 'next greater multiple stack pops', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000098, 2100000000000000011, 'HIDDEN', 9, '3\n2 2 3\n', '3 3 -1', 'next greater equal values are not greater', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000099, 2100000000000000011, 'HIDDEN', 10, '5\n9 1 8 2 7\n', '-1 8 -1 7 -1', 'next greater alternating highs', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000100, 2100000000000000012, 'HIDDEN', 2, '1 1\n5\n', '5', 'sliding window single element', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000101, 2100000000000000012, 'HIDDEN', 3, '5 5\n1 2 3 4 5\n', '5', 'sliding window whole array', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000102, 2100000000000000012, 'HIDDEN', 4, '5 1\n5 4 3 2 1\n', '5 4 3 2 1', 'sliding window size one', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000103, 2100000000000000012, 'HIDDEN', 5, '6 3\n1 2 3 2 5 1\n', '3 3 5 5', 'sliding window rising then peak', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000104, 2100000000000000012, 'HIDDEN', 6, '4 2\n-1 -3 -2 -5\n', '-1 -2 -2', 'sliding window negative values', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000105, 2100000000000000012, 'HIDDEN', 7, '6 4\n9 8 7 6 5 4\n', '9 8 7', 'sliding window descending values', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000106, 2100000000000000012, 'HIDDEN', 8, '7 3\n4 2 12 3 8 7 9\n', '12 12 12 8 9', 'sliding window high value leaves window', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000107, 2100000000000000012, 'HIDDEN', 9, '3 2\n1 1 1\n', '1 1', 'sliding window duplicate values', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000108, 2100000000000000012, 'HIDDEN', 10, '8 4\n2 1 5 3 4 6 0 7\n', '5 5 6 6 7', 'sliding window mixed longer array', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000109, 2100000000000000013, 'HIDDEN', 2, '1 1\n1\n', '1', 'spiral matrix single cell', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000110, 2100000000000000013, 'HIDDEN', 3, '1 4\n1 2 3 4\n', '1 2 3 4', 'spiral matrix single row', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000111, 2100000000000000013, 'HIDDEN', 4, '4 1\n1\n2\n3\n4\n', '1 2 3 4', 'spiral matrix single column', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000112, 2100000000000000013, 'HIDDEN', 5, '2 2\n1 2\n3 4\n', '1 2 4 3', 'spiral matrix two by two', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000113, 2100000000000000013, 'HIDDEN', 6, '3 2\n1 2\n3 4\n5 6\n', '1 2 4 6 5 3', 'spiral matrix tall rectangle', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000114, 2100000000000000013, 'HIDDEN', 7, '2 4\n1 2 3 4\n5 6 7 8\n', '1 2 3 4 8 7 6 5', 'spiral matrix wide rectangle', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000115, 2100000000000000013, 'HIDDEN', 8, '4 3\n1 2 3\n4 5 6\n7 8 9\n10 11 12\n', '1 2 3 6 9 12 11 10 7 4 5 8', 'spiral matrix four by three', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000116, 2100000000000000013, 'HIDDEN', 9, '3 3\n9 8 7\n6 5 4\n3 2 1\n', '9 8 7 4 1 2 3 6 5', 'spiral matrix descending values', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000117, 2100000000000000013, 'HIDDEN', 10, '3 4\n-1 -2 -3 -4\n-5 -6 -7 -8\n-9 -10 -11 -12\n', '-1 -2 -3 -4 -8 -12 -11 -10 -9 -5 -6 -7', 'spiral matrix negative rectangle', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000118, 2100000000000000014, 'HIDDEN', 2, '1 1\n0\n', '0', 'islands single water cell', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000119, 2100000000000000014, 'HIDDEN', 3, '1 1\n1\n', '1', 'islands single land cell', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000120, 2100000000000000014, 'HIDDEN', 4, '1 5\n10101\n', '3', 'islands one row separated land', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000121, 2100000000000000014, 'HIDDEN', 5, '3 1\n1\n0\n1\n', '2', 'islands one column separated land', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000122, 2100000000000000014, 'HIDDEN', 6, '2 3\n111\n111\n', '1', 'islands all land block', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000123, 2100000000000000014, 'HIDDEN', 7, '2 3\n000\n000\n', '0', 'islands all water grid', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000124, 2100000000000000014, 'HIDDEN', 8, '3 3\n101\n010\n101\n', '5', 'islands diagonal cells disconnected', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000125, 2100000000000000014, 'HIDDEN', 9, '3 3\n111\n101\n111\n', '1', 'islands ring around water', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000126, 2100000000000000014, 'HIDDEN', 10, '4 4\n1100\n1100\n0010\n0001\n', '3', 'islands mixed separated components', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000127, 2100000000000000015, 'HIDDEN', 2, '1 1\n0\n', '0', 'grid shortest path single cell', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000128, 2100000000000000015, 'HIDDEN', 3, '1 2\n0 0\n', '1', 'grid shortest path one row', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000129, 2100000000000000015, 'HIDDEN', 4, '2 1\n0\n0\n', '1', 'grid shortest path one column', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000130, 2100000000000000015, 'HIDDEN', 5, '2 2\n0 0\n0 0\n', '2', 'grid shortest path open square', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000131, 2100000000000000015, 'HIDDEN', 6, '2 2\n0 1\n1 0\n', '-1', 'grid shortest path blocked diagonal only', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000132, 2100000000000000015, 'HIDDEN', 7, '3 3\n0 0 0\n1 1 1\n0 0 0\n', '-1', 'grid shortest path blocked middle row', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000133, 2100000000000000015, 'HIDDEN', 8, '3 3\n0 1 0\n0 0 0\n0 1 0\n', '4', 'grid shortest path around obstacles', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000134, 2100000000000000015, 'HIDDEN', 9, '4 4\n0 0 0 0\n1 1 1 0\n0 0 0 0\n0 1 1 0\n', '6', 'grid shortest path corridor', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000135, 2100000000000000015, 'HIDDEN', 10, '4 3\n0 0 0\n0 1 0\n0 1 0\n0 0 0\n', '5', 'grid shortest path narrow detour', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000136, 2100000000000000016, 'HIDDEN', 2, '1\n1\n', '1', 'tree max depth single node', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000137, 2100000000000000016, 'HIDDEN', 3, '3\n1 2 3\n', '2', 'tree max depth full two levels', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000138, 2100000000000000016, 'HIDDEN', 4, '5\n1 2 null 3 null\n', '3', 'tree max depth left chain', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000139, 2100000000000000016, 'HIDDEN', 5, '5\n1 null 2 null 3\n', '3', 'tree max depth right chain', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000140, 2100000000000000016, 'HIDDEN', 6, '7\n1 2 3 4 5 6 7\n', '3', 'tree max depth complete three levels', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000141, 2100000000000000016, 'HIDDEN', 7, '7\n1 2 3 null 4 null 5\n', '3', 'tree max depth sparse tree', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000142, 2100000000000000016, 'HIDDEN', 8, '9\n1 2 null 3 null 4 null 5 null\n', '5', 'tree max depth long left spine', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000143, 2100000000000000016, 'HIDDEN', 9, '9\n1 null 2 null 3 null 4 null 5\n', '5', 'tree max depth long right spine', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000144, 2100000000000000016, 'HIDDEN', 10, '11\n1 2 3 4 null null 5 6 null null 7\n', '4', 'tree max depth uneven branches', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000145, 2100000000000000017, 'HIDDEN', 2, '1\n1\n', '1\n1', 'level order single node', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000146, 2100000000000000017, 'HIDDEN', 3, '3\n1 2 3\n', '2\n1\n2 3', 'level order two levels', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000147, 2100000000000000017, 'HIDDEN', 4, '5\n1 2 null 3 null\n', '3\n1\n2\n3', 'level order left chain', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000148, 2100000000000000017, 'HIDDEN', 5, '5\n1 null 2 null 3\n', '3\n1\n2\n3', 'level order right chain', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000149, 2100000000000000017, 'HIDDEN', 6, '7\n1 2 3 4 5 6 7\n', '3\n1\n2 3\n4 5 6 7', 'level order complete tree', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000150, 2100000000000000017, 'HIDDEN', 7, '7\n1 2 3 null 4 null 5\n', '3\n1\n2 3\n4 5', 'level order sparse tree', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000151, 2100000000000000017, 'HIDDEN', 8, '9\n1 2 null 3 null 4 null 5 null\n', '5\n1\n2\n3\n4\n5', 'level order long left spine', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000152, 2100000000000000017, 'HIDDEN', 9, '9\n1 null 2 null 3 null 4 null 5\n', '5\n1\n2\n3\n4\n5', 'level order long right spine', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000153, 2100000000000000017, 'HIDDEN', 10, '11\n1 2 3 4 null null 5 6 null null 7\n', '4\n1\n2 3\n4 5\n6 7', 'level order uneven branches', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000154, 2100000000000000018, 'HIDDEN', 2, '1 0\n', '1', 'components single isolated vertex', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000155, 2100000000000000018, 'HIDDEN', 3, '4 0\n', '4', 'components no edges', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000156, 2100000000000000018, 'HIDDEN', 4, '4 3\n1 2\n2 3\n3 4\n', '1', 'components connected chain', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000157, 2100000000000000018, 'HIDDEN', 5, '5 4\n1 2\n2 3\n3 1\n4 5\n', '2', 'components cycle plus pair', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000158, 2100000000000000018, 'HIDDEN', 6, '6 3\n1 2\n2 3\n4 5\n', '3', 'components with isolated vertex', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000159, 2100000000000000018, 'HIDDEN', 7, '5 5\n1 2\n2 3\n3 4\n4 5\n5 1\n', '1', 'components cycle all vertices', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000160, 2100000000000000018, 'HIDDEN', 8, '7 3\n1 2\n3 4\n5 6\n', '4', 'components three pairs and singleton', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000161, 2100000000000000018, 'HIDDEN', 9, '8 6\n1 2\n2 3\n4 5\n6 7\n7 8\n6 8\n', '3', 'components mixed chain and cycle', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000162, 2100000000000000018, 'HIDDEN', 10, '6 6\n1 2\n1 2\n2 3\n4 5\n5 6\n4 6\n', '2', 'components duplicate edges', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000163, 2100000000000000019, 'HIDDEN', 2, '1 0\n', '1', 'topological sort single node', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000164, 2100000000000000019, 'HIDDEN', 3, '4 3\n1 2\n2 3\n3 4\n', '1 2 3 4', 'topological sort simple chain', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000165, 2100000000000000019, 'HIDDEN', 4, '4 5\n1 2\n1 3\n2 3\n2 4\n3 4\n', '1 2 3 4', 'topological sort forced diamond', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000166, 2100000000000000019, 'HIDDEN', 5, '5 5\n1 2\n1 3\n2 4\n3 4\n4 5\n', '1 2 3 4 5', 'topological sort stable diamond', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000167, 2100000000000000019, 'HIDDEN', 6, '5 4\n1 2\n2 3\n3 4\n4 5\n', '1 2 3 4 5', 'topological sort five node chain', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000168, 2100000000000000019, 'HIDDEN', 7, '6 7\n1 2\n1 3\n2 3\n3 4\n4 5\n4 6\n5 6\n', '1 2 3 4 5 6', 'topological sort layered forced order', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000169, 2100000000000000019, 'HIDDEN', 8, '3 2\n1 2\n1 3\n', '1 2 3', 'topological sort stable siblings', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000170, 2100000000000000019, 'HIDDEN', 9, '6 5\n1 2\n2 3\n3 4\n4 5\n5 6\n', '1 2 3 4 5 6', 'topological sort longer chain', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000171, 2100000000000000019, 'HIDDEN', 10, '6 8\n1 2\n1 3\n2 3\n2 4\n3 4\n4 5\n4 6\n5 6\n', '1 2 3 4 5 6', 'topological sort dense forced dag', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000172, 2100000000000000020, 'HIDDEN', 2, '2 1\n2 1 2\n', 'NO', 'union find query before union', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000173, 2100000000000000020, 'HIDDEN', 3, '2 2\n1 1 2\n2 1 2\n', 'YES', 'union find simple union then query', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000174, 2100000000000000020, 'HIDDEN', 4, '3 4\n1 1 2\n2 1 3\n1 2 3\n2 1 3\n', 'NO\nYES', 'union find transitive connection', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000175, 2100000000000000020, 'HIDDEN', 5, '4 5\n1 1 2\n1 3 4\n2 1 4\n1 2 3\n2 1 4\n', 'NO\nYES', 'union find merge two components', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000176, 2100000000000000020, 'HIDDEN', 6, '3 3\n2 1 1\n1 1 2\n2 2 2\n', 'YES\nYES', 'union find self queries', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000177, 2100000000000000020, 'HIDDEN', 7, '5 6\n1 1 2\n1 2 3\n2 1 3\n2 1 4\n1 4 5\n2 4 5\n', 'YES\nNO\nYES', 'union find chain and separate pair', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000178, 2100000000000000020, 'HIDDEN', 8, '5 5\n1 1 5\n1 2 4\n2 1 5\n2 2 5\n2 3 3\n', 'YES\nNO\nYES', 'union find distant vertices', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000179, 2100000000000000020, 'HIDDEN', 9, '4 4\n1 1 2\n1 1 2\n2 1 2\n2 3 4\n', 'YES\nNO', 'union find repeated union', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000180, 2100000000000000020, 'HIDDEN', 10, '6 7\n1 1 2\n1 3 4\n1 5 6\n2 1 6\n1 2 3\n2 1 4\n2 5 6\n', 'NO\nYES\nYES', 'union find multiple components', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000181, 2100000000000000021, 'HIDDEN', 2, '1\n5\n', '1', 'lis single element', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000182, 2100000000000000021, 'HIDDEN', 3, '5\n1 2 3 4 5\n', '5', 'lis increasing sequence', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000183, 2100000000000000021, 'HIDDEN', 4, '5\n5 4 3 2 1\n', '1', 'lis decreasing sequence', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000184, 2100000000000000021, 'HIDDEN', 5, '6\n2 2 2 2 2 2\n', '1', 'lis equal values not increasing', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000185, 2100000000000000021, 'HIDDEN', 6, '6\n1 3 2 4 3 5\n', '4', 'lis alternating rises', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000186, 2100000000000000021, 'HIDDEN', 7, '6\n-1 -2 -3 0 1 2\n', '4', 'lis negative then positive', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000187, 2100000000000000021, 'HIDDEN', 8, '8\n10 9 2 5 3 7 101 18\n', '4', 'lis classic mixed sequence', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000188, 2100000000000000021, 'HIDDEN', 9, '7\n0 1 0 3 2 3 4\n', '5', 'lis duplicates with final extension', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000189, 2100000000000000021, 'HIDDEN', 10, '9\n4 10 4 3 8 9 1 2 3\n', '3', 'lis multiple local choices', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000190, 2100000000000000022, 'HIDDEN', 2, 'a\na\n', '1', 'lcs single equal char', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000191, 2100000000000000022, 'HIDDEN', 3, 'a\nb\n', '0', 'lcs single different char', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000192, 2100000000000000022, 'HIDDEN', 4, 'abc\nabc\n', '3', 'lcs identical strings', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000193, 2100000000000000022, 'HIDDEN', 5, 'abc\ndef\n', '0', 'lcs no common chars', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000194, 2100000000000000022, 'HIDDEN', 6, 'abcde\nace\n', '3', 'lcs subsequence in order', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000195, 2100000000000000022, 'HIDDEN', 7, 'abcbdab\nbdcaba\n', '4', 'lcs classic case', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000196, 2100000000000000022, 'HIDDEN', 8, 'aaaa\naa\n', '2', 'lcs repeated chars', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000197, 2100000000000000022, 'HIDDEN', 9, 'AGGTAB\nGXTXAYB\n', '4', 'lcs uppercase classic case', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000198, 2100000000000000022, 'HIDDEN', 10, 'abcdef\nfbdamn\n', '2', 'lcs sparse common chars', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000199, 2100000000000000023, 'HIDDEN', 2, '1 1\n5\n', '5', 'minimum path sum single cell', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000200, 2100000000000000023, 'HIDDEN', 3, '1 4\n1 2 3 4\n', '10', 'minimum path sum single row', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000201, 2100000000000000023, 'HIDDEN', 4, '4 1\n1\n2\n3\n4\n', '10', 'minimum path sum single column', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000202, 2100000000000000023, 'HIDDEN', 5, '2 2\n1 2\n3 4\n', '7', 'minimum path sum two by two', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000203, 2100000000000000023, 'HIDDEN', 6, '3 3\n1 3 1\n1 5 1\n4 2 1\n', '7', 'minimum path sum classic grid', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000204, 2100000000000000023, 'HIDDEN', 7, '2 3\n1 2 5\n3 2 1\n', '6', 'minimum path sum rectangle', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000205, 2100000000000000023, 'HIDDEN', 8, '3 2\n1 4\n2 1\n3 1\n', '5', 'minimum path sum tall rectangle', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000206, 2100000000000000023, 'HIDDEN', 9, '3 3\n5 9 1\n4 1 1\n9 1 1\n', '12', 'minimum path sum avoids high cost', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000207, 2100000000000000023, 'HIDDEN', 10, '3 4\n1 1 10 1\n9 1 1 1\n9 9 9 1\n', '6', 'minimum path sum winding cheap route', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000208, 2100000000000000024, 'HIDDEN', 2, '1 0\n1\n', '0', 'coin change zero amount', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000209, 2100000000000000024, 'HIDDEN', 3, '1 3\n2\n', '-1', 'coin change unreachable single coin', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000210, 2100000000000000024, 'HIDDEN', 4, '1 10\n1\n', '10', 'coin change only one coin denomination', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000211, 2100000000000000024, 'HIDDEN', 5, '3 6\n1 3 4\n', '2', 'coin change choose two threes', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000212, 2100000000000000024, 'HIDDEN', 6, '2 7\n2 4\n', '-1', 'coin change gcd unreachable', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000213, 2100000000000000024, 'HIDDEN', 7, '3 27\n2 5 10\n', '4', 'coin change mixed denominations', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000214, 2100000000000000024, 'HIDDEN', 8, '4 14\n1 7 10 12\n', '2', 'coin change exact two large coins', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000215, 2100000000000000024, 'HIDDEN', 9, '3 11\n2 5 7\n', '3', 'coin change non greedy optimum', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000216, 2100000000000000024, 'HIDDEN', 10, '4 63\n1 5 10 25\n', '6', 'coin change larger amount', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000217, 2100000000000000025, 'HIDDEN', 2, '1 5\n6 10\n', '0', 'knapsack item too heavy', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000218, 2100000000000000025, 'HIDDEN', 3, '1 5\n5 10\n', '10', 'knapsack single exact item', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000219, 2100000000000000025, 'HIDDEN', 4, '3 5\n1 1\n2 6\n3 10\n', '16', 'knapsack combine two best items', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000220, 2100000000000000025, 'HIDDEN', 5, '3 4\n2 3\n2 4\n4 8\n', '8', 'knapsack choose single best item', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000221, 2100000000000000025, 'HIDDEN', 6, '4 10\n5 10\n4 40\n6 30\n3 50\n', '90', 'knapsack non greedy optimum', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000222, 2100000000000000025, 'HIDDEN', 7, '3 0\n1 10\n2 20\n3 30\n', '0', 'knapsack zero capacity', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000223, 2100000000000000025, 'HIDDEN', 8, '5 7\n1 1\n3 4\n4 5\n5 7\n2 3\n', '9', 'knapsack multiple combinations', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000224, 2100000000000000025, 'HIDDEN', 9, '4 6\n2 4\n2 5\n3 7\n4 8\n', '13', 'knapsack choose weights two and four', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000225, 2100000000000000025, 'HIDDEN', 10, '6 12\n3 6\n4 8\n5 10\n6 12\n7 14\n2 5\n', '25', 'knapsack larger capacity mix', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000226, 2100000000000000026, 'HIDDEN', 2, '1\n1 2\n', '1', 'interval scheduling single meeting', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000227, 2100000000000000026, 'HIDDEN', 3, '3\n1 2\n2 3\n3 4\n', '3', 'interval scheduling touching intervals allowed', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000228, 2100000000000000026, 'HIDDEN', 4, '3\n1 4\n2 3\n3 5\n', '2', 'interval scheduling short middle then tail', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000229, 2100000000000000026, 'HIDDEN', 5, '4\n1 10\n2 3\n3 4\n4 5\n', '3', 'interval scheduling skip long interval', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000230, 2100000000000000026, 'HIDDEN', 6, '4\n5 6\n1 2\n3 4\n2 3\n', '4', 'interval scheduling unsorted chain', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000231, 2100000000000000026, 'HIDDEN', 7, '4\n1 3\n1 3\n1 3\n3 4\n', '2', 'interval scheduling duplicates', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000232, 2100000000000000026, 'HIDDEN', 8, '5\n1 2\n1 2\n2 3\n2 3\n3 4\n', '3', 'interval scheduling duplicate touching groups', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000233, 2100000000000000026, 'HIDDEN', 9, '5\n0 6\n1 2\n2 4\n4 7\n7 8\n', '4', 'interval scheduling choose many short intervals', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000234, 2100000000000000026, 'HIDDEN', 10, '6\n1 5\n2 3\n3 4\n4 5\n5 6\n6 7\n', '5', 'interval scheduling dense chain after skip', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000235, 2100000000000000027, 'HIDDEN', 2, '1\n5\n', '0', 'fruit merge single pile', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000236, 2100000000000000027, 'HIDDEN', 3, '2\n4 6\n', '10', 'fruit merge two piles', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000237, 2100000000000000027, 'HIDDEN', 4, '3\n1 2 3\n', '9', 'fruit merge three piles', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000238, 2100000000000000027, 'HIDDEN', 5, '4\n1 1 1 1\n', '8', 'fruit merge equal piles', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000239, 2100000000000000027, 'HIDDEN', 6, '4\n1 2 3 4\n', '19', 'fruit merge increasing small piles', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000240, 2100000000000000027, 'HIDDEN', 7, '5\n5 4 3 2 1\n', '33', 'fruit merge descending piles', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000241, 2100000000000000027, 'HIDDEN', 8, '5\n10 10 10 10 10\n', '120', 'fruit merge equal large piles', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000242, 2100000000000000027, 'HIDDEN', 9, '4\n8 4 6 12\n', '58', 'fruit merge mixed piles', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000243, 2100000000000000027, 'HIDDEN', 10, '6\n1 1 2 3 5 8\n', '45', 'fruit merge fibonacci-like piles', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000244, 2100000000000000028, 'HIDDEN', 2, '0\n0\n', '0', 'big integer add zeros', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000245, 2100000000000000028, 'HIDDEN', 3, '1\n999\n', '1000', 'big integer add carry into new digit', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000246, 2100000000000000028, 'HIDDEN', 4, '123\n456\n', '579', 'big integer add no carry', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000247, 2100000000000000028, 'HIDDEN', 5, '999\n999\n', '1998', 'big integer add all carry', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000248, 2100000000000000028, 'HIDDEN', 6, '1000000000000000000\n1\n', '1000000000000000001', 'big integer add long with one', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000249, 2100000000000000028, 'HIDDEN', 7, '500000000000000000\n500000000000000000\n', '1000000000000000000', 'big integer add equal halves', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000250, 2100000000000000028, 'HIDDEN', 8, '12345678901234567890\n98765432109876543210\n', '111111111011111111100', 'big integer add long mixed digits', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000251, 2100000000000000028, 'HIDDEN', 9, '99999999999999999999\n1\n', '100000000000000000000', 'big integer add carry chain', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000252, 2100000000000000028, 'HIDDEN', 10, '314159265358979323846\n271828182845904523536\n', '585987448204883847382', 'big integer add pi and e digits', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000253, 2100000000000000029, 'HIDDEN', 2, '42\n', '42', 'expression single number', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000254, 2100000000000000029, 'HIDDEN', 3, '1+2*3\n', '7', 'expression multiplication precedence', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000255, 2100000000000000029, 'HIDDEN', 4, '(1+2)*(3+4)\n', '21', 'expression parentheses multiplication', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000256, 2100000000000000029, 'HIDDEN', 5, '10/3\n', '3', 'expression division truncates toward zero', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000257, 2100000000000000029, 'HIDDEN', 6, '20-3*4\n', '8', 'expression subtraction after multiplication', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000258, 2100000000000000029, 'HIDDEN', 7, '(8+2)/3\n', '3', 'expression parenthesized numerator division', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000259, 2100000000000000029, 'HIDDEN', 8, '100/(3+7)+6*2\n', '22', 'expression mixed division and multiplication', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000260, 2100000000000000029, 'HIDDEN', 9, '(5+5)*(2+3)-7\n', '43', 'expression nested arithmetic', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000261, 2100000000000000029, 'HIDDEN', 10, '18/4+2*(3+1)\n', '12', 'expression truncation with addition', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000262, 2100000000000000030, 'HIDDEN', 2, '1 1\n5\n', '5', 'smallest k single element', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000263, 2100000000000000030, 'HIDDEN', 3, '5 5\n5 4 3 2 1\n', '1 2 3 4 5', 'smallest k all elements', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000264, 2100000000000000030, 'HIDDEN', 4, '5 1\n5 4 3 2 1\n', '1', 'smallest k one element', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000265, 2100000000000000030, 'HIDDEN', 5, '6 3\n1 1 2 2 3 3\n', '1 1 2', 'smallest k keeps duplicates', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000266, 2100000000000000030, 'HIDDEN', 6, '5 2\n-1 -3 2 0 -2\n', '-3 -2', 'smallest k negative values', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000267, 2100000000000000030, 'HIDDEN', 7, '4 2\n1000000000 -1000000000 0 5\n', '-1000000000 0', 'smallest k large values', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000268, 2100000000000000030, 'HIDDEN', 8, '8 4\n4 1 3 2 5 2 1 6\n', '1 1 2 2', 'smallest k unordered duplicates', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000269, 2100000000000000030, 'HIDDEN', 9, '6 3\n6 5 4 3 2 1\n', '1 2 3', 'smallest k descending values', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2400000000000000270, 2100000000000000030, 'HIDDEN', 10, '10 6\n9 1 8 2 7 3 6 4 5 0\n', '0 1 2 3 4 5', 'smallest k half of mixed sequence', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON DUPLICATE KEY UPDATE
+    `input_text` = VALUES(`input_text`),
+    `expected_output` = VALUES(`expected_output`),
+    `explanation` = VALUES(`explanation`),
+    `updated_at` = CURRENT_TIMESTAMP;
+
+

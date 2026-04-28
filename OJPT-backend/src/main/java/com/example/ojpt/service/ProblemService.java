@@ -1,6 +1,7 @@
 package com.example.ojpt.service;
 
 import com.example.ojpt.common.PageResult;
+import com.example.ojpt.dto.ProblemCreateDTO;
 import com.example.ojpt.dto.ProblemTestCaseBatchUpdateDTO;
 import com.example.ojpt.dto.ProblemUpdateDTO;
 import com.example.ojpt.vo.AdminProblemListItemVO;
@@ -12,6 +13,8 @@ import com.example.ojpt.vo.ProblemTestCaseVO;
 import java.util.List;
 
 public interface ProblemService {
+
+    ProblemSimpleVO createDraft(Long userId, ProblemCreateDTO dto);
 
     void updateProblem(Long problemId, ProblemUpdateDTO dto);
 

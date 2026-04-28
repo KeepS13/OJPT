@@ -1,14 +1,16 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
-const { getMock, postMock } = vi.hoisted(() => ({
+const { getMock, postMock, putMock } = vi.hoisted(() => ({
   getMock: vi.fn(),
   postMock: vi.fn(),
+  putMock: vi.fn(),
 }))
 
 vi.mock('@/api/request', () => ({
   default: {
     get: getMock,
     post: postMock,
+    put: putMock,
   },
 }))
 
@@ -17,7 +19,9 @@ import {
   getProblemDetail,
   getProblemDetailByNo,
   getProblemSampleTestCases,
+  getProblemCodeDraft,
   runProblemCode,
+  saveProblemCodeDraft,
   submitProblemCode,
 } from '../../../src/api/problem'
 
@@ -25,6 +29,7 @@ describe('problem api', () => {
   beforeEach(() => {
     getMock.mockReset()
     postMock.mockReset()
+    putMock.mockReset()
   })
 
   it('getProblemList should send GET /problems with query params', async () => {
@@ -75,7 +80,9 @@ describe('problem api', () => {
     await submitProblemCode(problemNo, payload)
 
     expect(postMock).toHaveBeenCalledTimes(1)
-    expect(postMock).toHaveBeenCalledWith(`/problems/no/${problemNo}/submissions`, payload)
+    expect(postMock).toHaveBeenCalledWith(`/problems/no/${problemNo}/submissions`, payload, {
+      timeout: 60000,
+    })
   })
 
   it('runProblemCode should send POST /problems/run with code and cases', async () => {
@@ -91,7 +98,30 @@ describe('problem api', () => {
     await runProblemCode(payload)
 
     expect(postMock).toHaveBeenCalledTimes(1)
-    expect(postMock).toHaveBeenCalledWith('/problems/run', payload)
+    expect(postMock).toHaveBeenCalledWith('/problems/run', payload, {
+      timeout: 60000,
+    })
+  })
+
+  it('getProblemCodeDraft should send GET /problems/no/{problemNo}/draft with language', async () => {
+    getMock.mockResolvedValue({ data: null })
+
+    await getProblemCodeDraft(2, 'Python3')
+
+    expect(getMock).toHaveBeenCalledTimes(1)
+    expect(getMock).toHaveBeenCalledWith('/problems/no/2/draft', {
+      params: { language: 'Python3' },
+    })
+  })
+
+  it('saveProblemCodeDraft should send PUT /problems/no/{problemNo}/draft', async () => {
+    const payload = { language: 'Python3', sourceCode: "print('draft')" }
+    putMock.mockResolvedValue({ data: {} })
+
+    await saveProblemCodeDraft(2, payload)
+
+    expect(putMock).toHaveBeenCalledTimes(1)
+    expect(putMock).toHaveBeenCalledWith('/problems/no/2/draft', payload)
   })
 
   describe('problemNo field', () => {

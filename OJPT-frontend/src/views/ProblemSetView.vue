@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getProblemList } from '@/api/problem'
@@ -47,7 +47,13 @@ const total = ref(0)
 const searchKeyword = ref('')
 const activeDifficulty = ref<Difficulty | 'ALL'>('ALL')
 const activeStatus = ref<ProblemStatus | 'ALL'>('ALL')
-const orderBy = ref<'DEFAULT' | 'ID' | 'DIFFICULTY' | 'ACCEPTANCE'>('DEFAULT')
+const activeTagId = ref<string | number | 'ALL'>('ALL')
+const tagOptions = ref<ProblemTagVO[]>([])
+
+const solvedCount = computed(() => problems.value.filter((p) => p.status === 'SOLVED').length)
+const easyCount = computed(() => problems.value.filter((p) => p.difficulty === 'EASY').length)
+const mediumCount = computed(() => problems.value.filter((p) => p.difficulty === 'MEDIUM').length)
+const hardCount = computed(() => problems.value.filter((p) => p.difficulty === 'HARD').length)
 
 const getDifficultyClass = (difficulty: Difficulty) => {
   if (difficulty === 'EASY') return 'difficulty-badge difficulty-badge--easy'
@@ -77,8 +83,8 @@ const fetchProblems = async () => {
     if (activeStatus.value !== 'ALL') {
       params.status = activeStatus.value
     }
-    if (orderBy.value !== 'DEFAULT') {
-      params.orderBy = orderBy.value
+    if (activeTagId.value !== 'ALL') {
+      params.tagId = activeTagId.value
     }
 
     const res = await getProblemList(params)
@@ -89,6 +95,7 @@ const fetchProblems = async () => {
 
     problems.value = pageData?.records ?? []
     total.value = pageData?.total ?? 0
+    mergeTagOptions(problems.value)
   } catch (e) {
     ElMessage.error('加载题库失败，请稍后重试')
   } finally {
@@ -96,9 +103,36 @@ const fetchProblems = async () => {
   }
 }
 
+const mergeTagOptions = (records: ProblemListItemVO[]) => {
+  const tagMap = new Map<string, ProblemTagVO>()
+  tagOptions.value.forEach((tag) => tagMap.set(String(tag.id), tag))
+  records.forEach((problem) => {
+    const tags = problem.tags ?? []
+    tags.forEach((tag) => {
+      tagMap.set(String(tag.id), tag)
+    })
+  })
+  tagOptions.value = Array.from(tagMap.values())
+}
+
+const setDifficulty = (difficulty: Difficulty | 'ALL') => {
+  activeDifficulty.value = difficulty
+  page.value = 1
+}
+
+const setStatus = (status: ProblemStatus | 'ALL') => {
+  activeStatus.value = status
+  page.value = 1
+}
+
+const setTag = (tagId: string | number | 'ALL') => {
+  activeTagId.value = tagId
+  page.value = 1
+}
+
 onMounted(fetchProblems)
 
-watch([page, pageSize, searchKeyword, activeDifficulty, activeStatus, orderBy], () => {
+watch([page, pageSize, searchKeyword, activeDifficulty, activeStatus, activeTagId], () => {
   fetchProblems()
 })
 </script>
@@ -113,20 +147,20 @@ watch([page, pageSize, searchKeyword, activeDifficulty, activeStatus, orderBy], 
       <div class="stats">
         <div class="stat-item">
           <span class="stat-label">已通过</span>
-          <span class="stat-value">0</span>
-          <span class="stat-extra">/ 4224</span>
+          <span class="stat-value">{{ solvedCount }}</span>
+          <span class="stat-extra">/ {{ total }}</span>
         </div>
         <div class="stat-item">
           <span class="stat-label">简单</span>
-          <span class="stat-pill stat-pill--easy">0 / 1200</span>
+          <span class="stat-pill stat-pill--easy">{{ easyCount }} / {{ problems.length }}</span>
         </div>
         <div class="stat-item">
           <span class="stat-label">中等</span>
-          <span class="stat-pill stat-pill--medium">0 / 2000</span>
+          <span class="stat-pill stat-pill--medium">{{ mediumCount }} / {{ problems.length }}</span>
         </div>
         <div class="stat-item">
           <span class="stat-label">困难</span>
-          <span class="stat-pill stat-pill--hard">0 / 1024</span>
+          <span class="stat-pill stat-pill--hard">{{ hardCount }} / {{ problems.length }}</span>
         </div>
       </div>
     </section>
@@ -139,6 +173,7 @@ watch([page, pageSize, searchKeyword, activeDifficulty, activeStatus, orderBy], 
             class="chip"
             :class="{ 'chip--active': activeDifficulty === 'ALL' }"
             type="button"
+            @click="setDifficulty('ALL')"
           >
             全部
           </button>
@@ -151,6 +186,7 @@ watch([page, pageSize, searchKeyword, activeDifficulty, activeStatus, orderBy], 
               { 'chip--active': activeDifficulty === d.value },
             ]"
             type="button"
+            @click="setDifficulty(d.value)"
           >
             {{ d.label }}
           </button>
@@ -164,8 +200,31 @@ watch([page, pageSize, searchKeyword, activeDifficulty, activeStatus, orderBy], 
             class="chip chip--ghost"
             :class="{ 'chip--active': activeStatus === s.value }"
             type="button"
+            @click="setStatus(s.value)"
           >
             {{ s.label }}
+          </button>
+        </div>
+
+        <div v-if="tagOptions.length" class="filter-group filter-group--tags">
+          <span class="filter-label">标签</span>
+          <button
+            class="chip chip--ghost"
+            :class="{ 'chip--active': activeTagId === 'ALL' }"
+            type="button"
+            @click="setTag('ALL')"
+          >
+            全部
+          </button>
+          <button
+            v-for="tag in tagOptions"
+            :key="tag.id"
+            class="chip chip--ghost"
+            :class="{ 'chip--active': String(activeTagId) === String(tag.id) }"
+            type="button"
+            @click="setTag(tag.id)"
+          >
+            {{ tag.name }}
           </button>
         </div>
       </div>
@@ -178,15 +237,6 @@ watch([page, pageSize, searchKeyword, activeDifficulty, activeStatus, orderBy], 
             class="search-input"
             placeholder="搜索题目 / 标签 / 题号"
           />
-        </div>
-        <div class="sort-select">
-          <label for="orderBy">排序：</label>
-          <select id="orderBy" v-model="orderBy">
-            <option value="DEFAULT">推荐</option>
-            <option value="ID">题号</option>
-            <option value="DIFFICULTY">难度</option>
-            <option value="ACCEPTANCE">通过率</option>
-          </select>
         </div>
       </div>
     </section>
@@ -440,23 +490,6 @@ watch([page, pageSize, searchKeyword, activeDifficulty, activeStatus, orderBy], 
   color: #9ca3af;
 }
 
-.sort-select {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 13px;
-  color: #6b7280;
-}
-
-.sort-select select {
-  font-size: 13px;
-  padding: 4px 8px;
-  border-radius: 999px;
-  border: 1px solid #e5e7eb;
-  outline: none;
-  background-color: #ffffff;
-}
-
 .problemset-table {
   border-radius: 10px;
   border: 1px solid #e5e7eb;
@@ -645,4 +678,3 @@ watch([page, pageSize, searchKeyword, activeDifficulty, activeStatus, orderBy], 
   }
 }
 </style>
-

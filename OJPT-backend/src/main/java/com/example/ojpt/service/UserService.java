@@ -3,6 +3,7 @@ package com.example.ojpt.service;
 import com.example.ojpt.dto.EmailUpdateDTO;
 import com.example.ojpt.dto.PasswordUpdateDTO;
 import com.example.ojpt.dto.PhoneUpdateDTO;
+import com.example.ojpt.dto.RegisterRequestDTO;
 import com.example.ojpt.dto.UserUpdateDTO;
 import com.example.ojpt.dto.UsernameUpdateDTO;
 import com.example.ojpt.entity.User;
@@ -27,6 +28,8 @@ public interface UserService {
      * 通过手机号查找用户（用于手机号登录）。
      */
     User findByPhone(String phone);
+
+    User register(RegisterRequestDTO dto);
 
     /**
      * 更新用户头像路径。
@@ -116,4 +119,3 @@ public interface UserService {
      */
     void deleteAccount(Long userId);
 }
-

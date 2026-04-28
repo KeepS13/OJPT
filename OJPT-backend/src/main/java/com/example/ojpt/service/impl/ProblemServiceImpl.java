@@ -31,6 +31,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -44,6 +45,7 @@ public class ProblemServiceImpl implements ProblemService {
     private static final String STATUS_ARCHIVED = "ARCHIVED";
     private static final String CASE_TYPE_SAMPLE = "SAMPLE";
     private static final String CASE_TYPE_HIDDEN = "HIDDEN";
+    private static final String PROGRESS_UNSOLVED = "UNSOLVED";
 
     private final ProblemMapper problemMapper;
     private final ProblemTestCaseMapper problemTestCaseMapper;
@@ -158,9 +160,7 @@ public class ProblemServiceImpl implements ProblemService {
         LambdaQueryWrapper<Problem> wrapper = new LambdaQueryWrapper<Problem>()
                 .eq(Problem::getIsDeleted, 0);
 
-        if (keyword != null && !keyword.isBlank()) {
-            wrapper.like(Problem::getTitle, keyword.trim());
-        }
+        applyProblemKeywordFilter(wrapper, keyword);
         if (difficulty != null && !difficulty.isBlank()) {
             wrapper.eq(Problem::getDifficulty, difficulty.trim());
         }
@@ -278,9 +278,7 @@ public class ProblemServiceImpl implements ProblemService {
             .eq(Problem::getIsDeleted, 0)
             .eq(Problem::getStatus, STATUS_PUBLISHED);
 
-        if (keyword != null && !keyword.isBlank()) {
-            wrapper.like(Problem::getTitle, keyword.trim());
-        }
+        applyProblemKeywordFilter(wrapper, keyword);
         if (difficulty != null && !difficulty.isBlank()) {
             wrapper.eq(Problem::getDifficulty, difficulty.trim());
         }
@@ -363,7 +361,7 @@ public class ProblemServiceImpl implements ProblemService {
         if (userId != null && status != null && !status.isBlank()) {
             String expected = status.trim();
             filteredProblems = problems.stream()
-                    .filter(p2 -> expected.equals(statusMap.get(p2.getId())))
+                    .filter(p2 -> expected.equals(statusMap.getOrDefault(p2.getId(), PROGRESS_UNSOLVED)))
                     .toList();
         } else {
             filteredProblems = problems;
@@ -376,7 +374,7 @@ public class ProblemServiceImpl implements ProblemService {
                     vo.setProblemNo(p2.getProblemNo());
                     vo.setTitle(p2.getTitle());
                     vo.setDifficulty(p2.getDifficulty());
-                    vo.setStatus(statusMap.get(p2.getId()));
+                    vo.setStatus(statusMap.getOrDefault(p2.getId(), PROGRESS_UNSOLVED));
                     vo.setSubmitCount(p2.getSubmitCount());
                     vo.setAcceptedCount(p2.getAcceptedCount());
                     if (p2.getSubmitCount() != null && p2.getSubmitCount() > 0) {
@@ -568,6 +566,40 @@ public class ProblemServiceImpl implements ProblemService {
         vo.setCreatedAt(problem.getCreatedAt());
         vo.setUpdatedAt(problem.getUpdatedAt());
         return vo;
+    }
+
+    private void applyProblemKeywordFilter(LambdaQueryWrapper<Problem> wrapper, String keyword) {
+        if (keyword == null || keyword.isBlank()) {
+            return;
+        }
+
+        String trimmed = keyword.trim();
+        if ("P".equals(trimmed.toUpperCase(Locale.ROOT))) {
+            return;
+        }
+
+        Integer problemNo = parseProblemNoKeyword(trimmed);
+        if (problemNo != null) {
+            wrapper.and(w -> w.like(Problem::getTitle, trimmed).or().eq(Problem::getProblemNo, problemNo));
+            return;
+        }
+
+        wrapper.like(Problem::getTitle, trimmed);
+    }
+
+    private Integer parseProblemNoKeyword(String keyword) {
+        String normalized = keyword.toUpperCase(Locale.ROOT);
+        String numberPart = normalized.startsWith("P") ? normalized.substring(1) : normalized;
+        if (numberPart.isBlank() || !numberPart.chars().allMatch(Character::isDigit)) {
+            return null;
+        }
+
+        try {
+            int value = Integer.parseInt(numberPart);
+            return value > 0 ? value : null;
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     private List<TagVO> loadTagVos(Long problemId) {

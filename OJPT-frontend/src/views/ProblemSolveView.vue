@@ -5,13 +5,24 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import LoginDialog from '@/components/auth/LoginDialog.vue'
 import UserAvatar from '@/components/common/UserAvatar.vue'
 import { useAuth } from '@/hooks/useAuth'
-import { getProblemDetailByNo, getProblemSampleTestCases, runProblemCode, submitProblemCode } from '@/api/problem'
+import {
+  getProblemDetailByNo,
+  getProblemSampleTestCases,
+  getProblemCodeDraft,
+  runProblemCode,
+  saveProblemCodeDraft,
+  submitProblemCode,
+  type ProblemCodeRunCaseResult,
+  type ProblemCodeRunResult,
+  type ProblemCodeSubmissionResult,
+} from '@/api/problem'
 import { renderMarkdown } from '@/utils/markdown'
 import type { SupportedLanguage } from '@/constants/languageTemplates'
 import { getProblemDefaultTestCases, getProblemTemplate } from '@/utils/problemPresets'
 
 const route = useRoute()
 const router = useRouter()
+const { isAuthed, user, logout } = useAuth()
 
 const routeProblemNo = computed(() => route.params.problemNo)
 
@@ -58,19 +69,526 @@ const code = ref<string>(resolveTemplate(activeLanguage.value, null))
 // 代码编辑器：行号与滚动同步
 const codeEditorRef = ref<HTMLTextAreaElement | null>(null)
 const lineNumbersRef = ref<HTMLElement | null>(null)
+const codeCursorLine = ref(1)
+const codeCursorColumn = ref(1)
 
 const lineNumbers = computed(() =>
   Array.from({ length: Math.max(1, code.value.split('\n').length) }, (_, i) => i + 1),
 )
+
+const codeLineCount = computed(() => Math.max(1, code.value.split('\n').length))
+
+const updateCodeCursorPosition = () => {
+  const textarea = codeEditorRef.value
+  if (!textarea) return
+  const beforeCursor = textarea.value.slice(0, textarea.selectionStart)
+  const lines = beforeCursor.split('\n')
+  codeCursorLine.value = lines.length
+  codeCursorColumn.value = (lines[lines.length - 1]?.length ?? 0) + 1
+}
 
 const syncCodeScroll = () => {
   if (!codeEditorRef.value || !lineNumbersRef.value) return
   lineNumbersRef.value.scrollTop = codeEditorRef.value.scrollTop
 }
 
-const resetCodeToDefault = () => {
-  code.value = resolveTemplate(activeLanguage.value, problemDetail.value)
+const resetCodeToDefault = async () => {
+  try {
+    await ElMessageBox.confirm(
+      '重置后当前编辑区代码会恢复为默认模板，未保存的修改将被覆盖。确认重置吗？',
+      '重置代码',
+      {
+        confirmButtonText: '重置',
+        cancelButtonText: '取消',
+        type: 'warning',
+      },
+    )
+  } catch {
+    return
+  }
+
+  await setCodeWithoutDraftSave(resolveTemplate(activeLanguage.value, problemDetail.value))
+  clearDraftSaveTimer()
+  draftSyncStatus.value = 'idle'
+  await nextTick(() => {
+    if (codeEditorRef.value) codeEditorRef.value.scrollTop = 0
+    if (lineNumbersRef.value) lineNumbersRef.value.scrollTop = 0
+    updateCodeCursorPosition()
+  })
+}
+
+const setCodeWithoutDraftSave = async (value: string) => {
+  suppressDraftSave = true
+  code.value = value
+  await nextTick()
+  suppressDraftSave = false
+  resetCodeEditorHistory(value)
+  updateCodeCursorPosition()
+}
+
+const clearDraftSaveTimer = () => {
+  if (draftSaveTimer) {
+    clearTimeout(draftSaveTimer)
+    draftSaveTimer = null
+  }
+}
+
+const CODE_INDENT = '    '
+const CODE_HISTORY_LIMIT = 100
+
+interface CodeEditorSnapshot {
+  value: string
+  selectionStart: number
+  selectionEnd: number
+}
+
+const codeEditorHistory: CodeEditorSnapshot[] = []
+let codeEditorHistoryIndex = -1
+
+const saveCodeDraftNow = async (language: SupportedLanguage, sourceCode: string) => {
+  if (!isAuthed.value || !problemDetail.value) return
+  const seq = ++draftSaveSeq
+  draftSyncStatus.value = 'saving'
+  try {
+    await saveProblemCodeDraft(Number(routeProblemNo.value), {
+      language,
+      sourceCode,
+    })
+    if (seq === draftSaveSeq) {
+      draftSyncStatus.value = 'saved'
+    }
+  } catch {
+    if (seq === draftSaveSeq) {
+      draftSyncStatus.value = 'error'
+    }
+  }
+}
+
+const scheduleCodeDraftSave = (language: SupportedLanguage, sourceCode: string) => {
+  if (!isAuthed.value || !problemDetail.value) return
+  clearDraftSaveTimer()
+  draftSaveTimer = setTimeout(() => {
+    draftSaveTimer = null
+    void saveCodeDraftNow(language, sourceCode)
+  }, 800)
+}
+
+const saveCurrentCodeDraftNow = async () => {
+  clearDraftSaveTimer()
+  await saveCodeDraftNow(activeLanguage.value, code.value)
+}
+
+const isSameCodeEditorSnapshot = (a: CodeEditorSnapshot | undefined, b: CodeEditorSnapshot) =>
+  !!a && a.value === b.value && a.selectionStart === b.selectionStart && a.selectionEnd === b.selectionEnd
+
+const recordCodeEditorHistory = (snapshot: CodeEditorSnapshot) => {
+  const current = codeEditorHistory[codeEditorHistoryIndex]
+  if (isSameCodeEditorSnapshot(current, snapshot)) return
+
+  if (codeEditorHistoryIndex < codeEditorHistory.length - 1) {
+    codeEditorHistory.splice(codeEditorHistoryIndex + 1)
+  }
+
+  codeEditorHistory.push(snapshot)
+  if (codeEditorHistory.length > CODE_HISTORY_LIMIT) {
+    codeEditorHistory.shift()
+  }
+  codeEditorHistoryIndex = codeEditorHistory.length - 1
+}
+
+const resetCodeEditorHistory = (value: string) => {
+  codeEditorHistory.splice(0, codeEditorHistory.length, {
+    value,
+    selectionStart: 0,
+    selectionEnd: 0,
+  })
+  codeEditorHistoryIndex = 0
+}
+
+const applyCodeEditorValue = (
+  textarea: HTMLTextAreaElement,
+  nextValue: string,
+  nextSelectionStart: number,
+  nextSelectionEnd: number,
+  recordHistory = true,
+) => {
+  code.value = nextValue
+  textarea.value = nextValue
+  if (recordHistory) {
+    recordCodeEditorHistory({
+      value: nextValue,
+      selectionStart: nextSelectionStart,
+      selectionEnd: nextSelectionEnd,
+    })
+  }
   nextTick(() => {
+    textarea.setSelectionRange(nextSelectionStart, nextSelectionEnd)
+    updateCodeCursorPosition()
+  })
+}
+
+const restoreCodeEditorSnapshot = (textarea: HTMLTextAreaElement, snapshot: CodeEditorSnapshot) => {
+  applyCodeEditorValue(textarea, snapshot.value, snapshot.selectionStart, snapshot.selectionEnd, false)
+}
+
+const syncCurrentCodeEditorSnapshot = (textarea: HTMLTextAreaElement) => {
+  recordCodeEditorHistory({
+    value: textarea.value,
+    selectionStart: textarea.selectionStart,
+    selectionEnd: textarea.selectionEnd,
+  })
+}
+
+const undoCodeEditorChange = (textarea: HTMLTextAreaElement) => {
+  syncCurrentCodeEditorSnapshot(textarea)
+  if (codeEditorHistoryIndex <= 0) return
+  codeEditorHistoryIndex -= 1
+  const snapshot = codeEditorHistory[codeEditorHistoryIndex]
+  if (snapshot) restoreCodeEditorSnapshot(textarea, snapshot)
+}
+
+const redoCodeEditorChange = (textarea: HTMLTextAreaElement) => {
+  if (codeEditorHistoryIndex >= codeEditorHistory.length - 1) return
+  codeEditorHistoryIndex += 1
+  const snapshot = codeEditorHistory[codeEditorHistoryIndex]
+  if (snapshot) restoreCodeEditorSnapshot(textarea, snapshot)
+}
+
+const handleCodeEditorInput = (event: Event) => {
+  const textarea = event.currentTarget as HTMLTextAreaElement | null
+  if (!textarea) return
+  syncCurrentCodeEditorSnapshot(textarea)
+}
+
+const countCodeChar = (value: string, char: string) =>
+  Array.from(value).filter((item) => item === char).length
+
+const formatBraceCode = (sourceCode: string) => {
+  let indentLevel = 0
+  return sourceCode
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map((rawLine) => {
+      const line = rawLine.replace(/\t/g, CODE_INDENT).trim()
+      if (!line) return ''
+
+      const startsWithClosingBrace = line.startsWith('}')
+      if (startsWithClosingBrace) {
+        indentLevel = Math.max(0, indentLevel - 1)
+      }
+
+      const formattedLine = `${CODE_INDENT.repeat(indentLevel)}${line}`
+      const openBraceCount = countCodeChar(line, '{')
+      const closeBraceCount = countCodeChar(line, '}')
+      indentLevel = Math.max(0, indentLevel + openBraceCount - closeBraceCount + (startsWithClosingBrace ? 1 : 0))
+      return formattedLine
+    })
+    .join('\n')
+}
+
+const formatPythonCode = (sourceCode: string) => {
+  let indentLevel = 0
+  const dedentPattern = /^(elif|else|except|finally)\b/
+  const outdentAfterPattern = /^(return|break|continue|pass|raise)\b/
+
+  return sourceCode
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map((rawLine) => {
+      const line = rawLine.replace(/\t/g, CODE_INDENT).trim()
+      if (!line) return ''
+
+      if (dedentPattern.test(line)) {
+        indentLevel = Math.max(0, indentLevel - 1)
+      }
+
+      const formattedLine = `${CODE_INDENT.repeat(indentLevel)}${line}`
+      if (line.endsWith(':')) {
+        indentLevel += 1
+      } else if (outdentAfterPattern.test(line)) {
+        indentLevel = Math.max(0, indentLevel - 1)
+      }
+      return formattedLine
+    })
+    .join('\n')
+}
+
+const formatCodeForLanguage = (sourceCode: string, language: SupportedLanguage) => {
+  if (language === 'Python3') return formatPythonCode(sourceCode)
+  return formatBraceCode(sourceCode)
+}
+
+const formatCodeEditor = (textarea: HTMLTextAreaElement) => {
+  const { selectionStart, selectionEnd, value } = textarea
+  syncCurrentCodeEditorSnapshot(textarea)
+
+  const nextValue = formatCodeForLanguage(value, activeLanguage.value)
+  const hadSelection = selectionStart !== selectionEnd
+  const selectedWholeFile = selectionStart === 0 && selectionEnd === value.length
+  const nextSelectionStart = selectedWholeFile ? 0 : Math.min(selectionStart, nextValue.length)
+  const nextSelectionEnd = selectedWholeFile
+    ? nextValue.length
+    : Math.min(hadSelection ? selectionEnd : selectionStart, nextValue.length)
+
+  applyCodeEditorValue(textarea, nextValue, nextSelectionStart, nextSelectionEnd)
+}
+
+const getSelectedLineBounds = (value: string, selectionStart: number, selectionEnd: number) => {
+  const lineStart = value.lastIndexOf('\n', selectionStart - 1) + 1
+  const effectiveEnd =
+    selectionEnd > selectionStart && value[selectionEnd - 1] === '\n'
+      ? selectionEnd - 1
+      : selectionEnd
+  const nextLineBreak = value.indexOf('\n', effectiveEnd)
+  const lineEnd = nextLineBreak === -1 ? value.length : nextLineBreak
+  return { lineStart, lineEnd }
+}
+
+const indentCodeSelection = (textarea: HTMLTextAreaElement) => {
+  const { value, selectionStart, selectionEnd } = textarea
+
+  if (selectionStart === selectionEnd) {
+    const nextCursor = selectionStart + CODE_INDENT.length
+    applyCodeEditorValue(
+      textarea,
+      `${value.slice(0, selectionStart)}${CODE_INDENT}${value.slice(selectionEnd)}`,
+      nextCursor,
+      nextCursor,
+    )
+    return
+  }
+
+  const { lineStart, lineEnd } = getSelectedLineBounds(value, selectionStart, selectionEnd)
+  const selectedLines = value.slice(lineStart, lineEnd).split('\n')
+  const nextBlock = selectedLines.map((line) => `${CODE_INDENT}${line}`).join('\n')
+  const insertedChars = selectedLines.length * CODE_INDENT.length
+  const nextSelectionStart =
+    selectionStart === lineStart ? selectionStart : selectionStart + CODE_INDENT.length
+
+  applyCodeEditorValue(
+    textarea,
+    `${value.slice(0, lineStart)}${nextBlock}${value.slice(lineEnd)}`,
+    nextSelectionStart,
+    selectionEnd + insertedChars,
+  )
+}
+
+const unindentCodeSelection = (textarea: HTMLTextAreaElement) => {
+  const { value, selectionStart, selectionEnd } = textarea
+  const { lineStart, lineEnd } = getSelectedLineBounds(value, selectionStart, selectionEnd)
+  const selectedLines = value.slice(lineStart, lineEnd).split('\n')
+  const lineStarts: number[] = []
+  const removedCounts: number[] = []
+  let offset = lineStart
+
+  const nextBlock = selectedLines
+    .map((line) => {
+      lineStarts.push(offset)
+      offset += line.length + 1
+      const leadingSpaces = line.match(/^ */)?.[0].length ?? 0
+      const removeCount = Math.min(CODE_INDENT.length, leadingSpaces)
+      removedCounts.push(removeCount)
+      return line.slice(removeCount)
+    })
+    .join('\n')
+
+  const removedBeforePosition = (position: number) =>
+    removedCounts.reduce((total, count, index) => {
+      const currentLineStart = lineStarts[index]
+      if (currentLineStart == null) return total
+      if (position <= currentLineStart) return total
+      return total + Math.min(count, position - currentLineStart)
+    }, 0)
+
+  applyCodeEditorValue(
+    textarea,
+    `${value.slice(0, lineStart)}${nextBlock}${value.slice(lineEnd)}`,
+    selectionStart - removedBeforePosition(selectionStart),
+    selectionEnd - removedBeforePosition(selectionEnd),
+  )
+}
+
+const getLineCommentToken = (language: SupportedLanguage) => (language === 'Python3' ? '#' : '//')
+
+const toggleLineCommentSelection = (textarea: HTMLTextAreaElement) => {
+  const { value, selectionStart, selectionEnd } = textarea
+  const { lineStart, lineEnd } = getSelectedLineBounds(value, selectionStart, selectionEnd)
+  const commentToken = getLineCommentToken(activeLanguage.value)
+  const selectedLines = value.slice(lineStart, lineEnd).split('\n')
+  const commentPattern = new RegExp(`^(\\s*)${commentToken.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} ?`)
+  const nonEmptyLines = selectedLines.filter((line) => line.trim())
+  const shouldUncomment = nonEmptyLines.length > 0 && nonEmptyLines.every((line) => commentPattern.test(line))
+
+  const nextBlock = selectedLines
+    .map((line) => {
+      if (!line.trim()) return line
+      if (shouldUncomment) {
+        return line.replace(commentPattern, '$1')
+      }
+      const leadingWhitespace = line.match(/^\s*/)?.[0] ?? ''
+      return `${leadingWhitespace}${commentToken} ${line.slice(leadingWhitespace.length)}`
+    })
+    .join('\n')
+  const nextValue = `${value.slice(0, lineStart)}${nextBlock}${value.slice(lineEnd)}`
+
+  applyCodeEditorValue(
+    textarea,
+    nextValue,
+    selectionStart === selectionEnd ? Math.min(selectionStart, nextValue.length) : lineStart,
+    selectionStart === selectionEnd ? Math.min(selectionStart, nextValue.length) : lineStart + nextBlock.length,
+  )
+}
+
+const duplicateCodeSelection = (textarea: HTMLTextAreaElement) => {
+  const { value, selectionStart, selectionEnd } = textarea
+
+  if (selectionStart !== selectionEnd) {
+    const selectedText = value.slice(selectionStart, selectionEnd)
+    applyCodeEditorValue(
+      textarea,
+      `${value.slice(0, selectionEnd)}${selectedText}${value.slice(selectionEnd)}`,
+      selectionEnd,
+      selectionEnd + selectedText.length,
+    )
+    return
+  }
+
+  const { lineStart, lineEnd } = getSelectedLineBounds(value, selectionStart, selectionEnd)
+  const lineText = value.slice(lineStart, lineEnd)
+  const duplicatedText = `\n${lineText}`
+  const nextCursor = selectionStart + duplicatedText.length
+
+  applyCodeEditorValue(
+    textarea,
+    `${value.slice(0, lineEnd)}${duplicatedText}${value.slice(lineEnd)}`,
+    nextCursor,
+    nextCursor,
+  )
+}
+
+const deleteCurrentCodeLine = (textarea: HTMLTextAreaElement) => {
+  const { value, selectionStart, selectionEnd } = textarea
+  const { lineStart, lineEnd } = getSelectedLineBounds(value, selectionStart, selectionEnd)
+  let deleteStart = lineStart
+  let deleteEnd = lineEnd
+
+  if (value[deleteEnd] === '\n') {
+    deleteEnd += 1
+  } else if (deleteStart > 0) {
+    deleteStart -= 1
+  }
+
+  const nextValue = `${value.slice(0, deleteStart)}${value.slice(deleteEnd)}`
+  const nextCursor = Math.min(deleteStart, nextValue.length)
+
+  applyCodeEditorValue(textarea, nextValue, nextCursor, nextCursor)
+}
+
+const withCodeEditor = (action: (textarea: HTMLTextAreaElement) => void) => {
+  const textarea = codeEditorRef.value
+  if (!textarea) return
+  action(textarea)
+  textarea.focus()
+}
+
+const handleFormatCodeClick = () => {
+  withCodeEditor(formatCodeEditor)
+}
+
+const handleToggleCommentClick = () => {
+  withCodeEditor(toggleLineCommentSelection)
+}
+
+const openShortcutTips = () => {
+  shortcutTipsVisible.value = true
+}
+
+const handleCodeEditorKeydown = (event: KeyboardEvent) => {
+  const textarea = event.currentTarget as HTMLTextAreaElement | null
+  const isModifierShortcut = event.ctrlKey || event.metaKey
+
+  if (event.key === 'Tab' && textarea) {
+    event.preventDefault()
+    if (event.shiftKey) {
+      unindentCodeSelection(textarea)
+      return
+    }
+    indentCodeSelection(textarea)
+    return
+  }
+
+  if (!isModifierShortcut || !textarea) return
+
+  const key = event.key.toLowerCase()
+
+  if (event.altKey && key === 'l') {
+    event.preventDefault()
+    formatCodeEditor(textarea)
+    return
+  }
+
+  if (key === 's') {
+    event.preventDefault()
+    void saveCurrentCodeDraftNow()
+    return
+  }
+
+  if (key === '/') {
+    event.preventDefault()
+    toggleLineCommentSelection(textarea)
+    return
+  }
+
+  if (key === 'd') {
+    event.preventDefault()
+    duplicateCodeSelection(textarea)
+    return
+  }
+
+  if (event.shiftKey && key === 'k') {
+    event.preventDefault()
+    deleteCurrentCodeLine(textarea)
+    return
+  }
+
+  if (key === 'z') {
+    event.preventDefault()
+    if (event.shiftKey) {
+      redoCodeEditorChange(textarea)
+      return
+    }
+    undoCodeEditorChange(textarea)
+    return
+  }
+
+  if (key === 'y' || key === 'r') {
+    event.preventDefault()
+    redoCodeEditorChange(textarea)
+  }
+}
+
+const loadCodeDraft = async (language: SupportedLanguage) => {
+  if (!isAuthed.value) return false
+  draftSyncStatus.value = 'loading'
+  try {
+    const result = await getProblemCodeDraft(Number(routeProblemNo.value), language)
+    if (result.data?.sourceCode != null) {
+      await setCodeWithoutDraftSave(result.data.sourceCode)
+      draftSyncStatus.value = 'saved'
+      return true
+    }
+    draftSyncStatus.value = 'idle'
+    return false
+  } catch {
+    draftSyncStatus.value = 'error'
+    return false
+  }
+}
+
+const applyLanguageCode = async (language: SupportedLanguage) => {
+  await setCodeWithoutDraftSave(resolveTemplate(language, problemDetail.value))
+  await loadCodeDraft(language)
+  await nextTick(() => {
     if (codeEditorRef.value) codeEditorRef.value.scrollTop = 0
     if (lineNumbersRef.value) lineNumbersRef.value.scrollTop = 0
   })
@@ -78,9 +596,32 @@ const resetCodeToDefault = () => {
 
 const isRunning = ref(false)
 const isSubmitting = ref(false)
+const runDialogVisible = ref(false)
+const runPending = ref(false)
+const runResult = ref<ProblemCodeRunResult | null>(null)
+const runError = ref('')
+const submitDialogVisible = ref(false)
+const submitPending = ref(false)
+const submitResult = ref<ProblemCodeSubmissionResult | null>(null)
+const submitError = ref('')
+const draftSyncStatus = ref<'idle' | 'loading' | 'saving' | 'saved' | 'error'>('idle')
 const isTiming = ref(false)
 const elapsedSeconds = ref(0)
 let timerHandle: ReturnType<typeof setInterval> | null = null
+let draftSaveTimer: ReturnType<typeof setTimeout> | null = null
+let suppressDraftSave = false
+let draftSaveSeq = 0
+
+const draftSyncText = computed(() => {
+  const map = {
+    idle: '未同步',
+    loading: '读取草稿',
+    saving: '同步中',
+    saved: '已同步',
+    error: '同步失败',
+  }
+  return map[draftSyncStatus.value]
+})
 
 const formattedElapsed = computed(() => {
   const minutes = Math.floor(elapsedSeconds.value / 60)
@@ -132,6 +673,10 @@ const handleRunCode = async () => {
 
   try {
     isRunning.value = true
+    runPending.value = true
+    runError.value = ''
+    runResult.value = null
+    runDialogVisible.value = true
     const result = await runProblemCode({
       language: activeLanguage.value,
       sourceCode: code.value,
@@ -139,6 +684,7 @@ const handleRunCode = async () => {
       memoryLimitKb: problemDetail.value?.memoryLimitKb,
       cases,
     })
+    runResult.value = result.data
     const targetCases = activeTestMode.value === 'sample' ? sampleTestCases.value : testCases.value
     result.data.caseResults.forEach((caseResult) => {
       const target = targetCases[caseResult.caseIndex]
@@ -152,7 +698,10 @@ const handleRunCode = async () => {
     } else {
       ElMessage.warning('运行完成，存在未通过用例')
     }
+  } catch (e) {
+    runError.value = e instanceof Error ? e.message : '运行失败'
   } finally {
+    runPending.value = false
     isRunning.value = false
   }
 }
@@ -190,16 +739,103 @@ const handleSubmitCodeReal = async () => {
 
   try {
     isSubmitting.value = true
+    submitPending.value = true
+    submitError.value = ''
+    submitResult.value = null
+    submitDialogVisible.value = true
     const result = await submitProblemCode(Number(routeProblemNo.value), {
       language: activeLanguage.value,
       sourceCode: code.value,
     })
+    submitResult.value = result.data
     ElMessage.success(result.data.message || '代码已提交')
     await loadProblemDetail()
+  } catch (e) {
+    submitError.value = e instanceof Error ? e.message : '提交失败'
   } finally {
+    submitPending.value = false
     isSubmitting.value = false
   }
 }
+
+const closeSubmitDialog = () => {
+  if (submitPending.value) return
+  submitDialogVisible.value = false
+}
+
+const closeRunDialog = () => {
+  if (runPending.value) return
+  runDialogVisible.value = false
+}
+
+const statusText = (status?: string | null) => {
+  const map: Record<string, string> = {
+    AC: '通过',
+    WA: '答案错误',
+    TLE: '运行超时',
+    MLE: '内存超限',
+    RE: '运行错误',
+    CE: '编译失败',
+    SYSTEM_ERROR: '系统错误',
+    RUNNING: '判题中',
+    QUEUED: '排队中',
+    FINISHED: '运行完成',
+  }
+  return status ? map[status] || status : '--'
+}
+
+const caseTitle = (item: ProblemCodeRunCaseResult, index: number) => {
+  const prefix = item.caseType === 'HIDDEN' ? '隐藏用例' : item.caseType === 'SAMPLE' ? '公开样例' : '测试用例'
+  return `${prefix} ${index + 1}`
+}
+
+const caseDisplayText = (value?: string | null) => {
+  if (value == null || value === '') return '--'
+  return value
+}
+
+const copyErrorText = async (value?: string | null) => {
+  const text = caseDisplayText(value)
+  if (!text || text === '--') return
+  try {
+    await navigator.clipboard?.writeText(text)
+    ElMessage.success('错误信息已复制')
+  } catch {
+    ElMessage.warning('复制失败，请手动选择错误信息')
+  }
+}
+
+const passedCaseCount = computed(() =>
+  submitResult.value?.caseResults?.filter((item) => item.status === 'AC').length ?? 0,
+)
+
+const submitTotalCaseCount = computed(() =>
+  submitResult.value?.totalCaseCount ?? submitResult.value?.caseResults?.length ?? 0,
+)
+
+const submitFailedCase = computed(() =>
+  submitResult.value?.caseResults?.find((item) => item.status !== 'AC') ?? null,
+)
+
+const submitTimeBuckets = computed(() =>
+  submitResult.value?.rankStats?.timeBuckets ?? [],
+)
+
+const maxBucketCount = (items: Array<{ count?: number | null }>) =>
+  Math.max(1, ...items.map((item) => item.count ?? 0))
+
+const bucketPercent = (count: number | null | undefined, items: Array<{ count?: number | null }>) =>
+  `${Math.max(0, ((count ?? 0) / maxBucketCount(items)) * 100)}%`
+
+const runPassedCaseCount = computed(() =>
+  runResult.value?.caseResults?.filter((item) => item.status === 'AC').length ?? 0,
+)
+
+const runTotalTimeMs = computed(() => {
+  const caseResults = runResult.value?.caseResults ?? []
+  if (!caseResults.length) return null
+  return Math.max(...caseResults.map((item) => item.timeMs ?? 0))
+})
 
 watch(
   activeLanguage,
@@ -209,18 +845,16 @@ watch(
     const prevTemplate = resolveTemplate(prevLang, problemDetail.value).trim()
     const currentCode = code.value.trim()
 
-    if (currentCode === prevTemplate) {
-      code.value = resolveTemplate(nextLang, problemDetail.value)
-      await nextTick(() => {
-        if (codeEditorRef.value) codeEditorRef.value.scrollTop = 0
-        if (lineNumbersRef.value) lineNumbersRef.value.scrollTop = 0
-      })
+    const isUnsyncedEditedCode = currentCode !== prevTemplate && draftSyncStatus.value !== 'saved'
+
+    if (!isUnsyncedEditedCode) {
+      await applyLanguageCode(nextLang)
       return
     }
 
     try {
       await ElMessageBox.confirm(
-        '切换语言将使用该语言的默认模板，当前代码不会自动保存。确认切换吗？',
+        '切换语言将加载该语言的模板或服务器草稿。确认切换吗？',
         '切换语言',
         {
           confirmButtonText: '切换',
@@ -228,11 +862,7 @@ watch(
           type: 'warning',
         },
       )
-      code.value = resolveTemplate(nextLang, problemDetail.value)
-      await nextTick(() => {
-        if (codeEditorRef.value) codeEditorRef.value.scrollTop = 0
-        if (lineNumbersRef.value) lineNumbersRef.value.scrollTop = 0
-      })
+      await applyLanguageCode(nextLang)
     } catch {
       activeLanguage.value = prevLang
     }
@@ -249,7 +879,7 @@ const loadProblemDetail = async () => {
     const body: any = res.data
     const data = body && typeof body === 'object' && 'data' in body ? body.data : body
     problemDetail.value = data as ProblemDetailVO
-    code.value = resolveTemplate(activeLanguage.value, problemDetail.value)
+    await applyLanguageCode(activeLanguage.value)
     sampleTestCases.value = (
       sampleCaseRes.data?.length ? sampleCaseRes.data : getProblemDefaultTestCases(problemDetail.value)
     ).map(toTestCase)
@@ -418,6 +1048,31 @@ const splitRatio = ref(0.6) // 上方代码区域所占比例
 const editorStorageKey = computed(() => `OJPT.solve.editorSplitRatio`)
 const editorPanelHeight = ref(0) // 右侧面板当前高度，用于按比例计算上下区域
 
+const shortcutTipsStorageKey = 'OJPT.solve.shortcutTipsHidden'
+const shortcutTipsVisible = ref(false)
+const shortcutTipsDontShowAgain = ref(false)
+const shortcutTipItems = [
+  { keys: 'Ctrl/Cmd + S', action: '立即保存草稿' },
+  { keys: 'Tab / Shift + Tab', action: '增加或减少缩进' },
+  { keys: 'Ctrl/Cmd + Z', action: '撤销编辑' },
+  { keys: 'Ctrl/Cmd + R / Y / Shift + Z', action: '重做编辑' },
+  { keys: 'Ctrl + Alt + L / Cmd + Option + L', action: '整理代码格式' },
+  { keys: 'Ctrl/Cmd + /', action: '切换行注释' },
+  { keys: 'Ctrl/Cmd + D', action: '复制当前行或选区' },
+  { keys: 'Ctrl/Cmd + Shift + K', action: '删除当前行或选中行' },
+]
+
+const showShortcutTipsIfNeeded = () => {
+  shortcutTipsVisible.value = localStorage.getItem(shortcutTipsStorageKey) !== 'true'
+}
+
+const closeShortcutTips = () => {
+  if (shortcutTipsDontShowAgain.value) {
+    localStorage.setItem(shortcutTipsStorageKey, 'true')
+  }
+  shortcutTipsVisible.value = false
+}
+
 const applyInitialWidth = async () => {
   await nextTick()
   // 1) localStorage
@@ -560,12 +1215,14 @@ onMounted(async () => {
   }
 
   window.addEventListener('resize', onWindowResize)
+  showShortcutTipsIfNeeded()
 })
 
 onBeforeUnmount(() => {
   stopResizing()
   stopEditorResizing()
   stopTimer()
+  clearDraftSaveTimer()
   window.removeEventListener('resize', onWindowResize)
   if (editorResizeObserver && editorPanelRef.value) {
     editorResizeObserver.unobserve(editorPanelRef.value)
@@ -611,7 +1268,11 @@ const handleBackToSet = () => {
 // 用户信息与下拉菜单（与顶部导航保持一致的行为）
 const showLogin = ref(false)
 const showMenu = ref(false)
-const { isAuthed, user, logout } = useAuth()
+
+watch(code, (nextCode) => {
+  if (suppressDraftSave || loadingProblem.value || !problemDetail.value) return
+  scheduleCodeDraftSave(activeLanguage.value, nextCode)
+})
 
 const displayName = computed(() => {
   return user.value?.username || user.value?.email || ''
@@ -851,6 +1512,13 @@ const handleLogout = () => {
                   {{ lang }}
                 </option>
               </select>
+              <span
+                v-if="isAuthed"
+                class="draft-sync"
+                :class="`draft-sync--${draftSyncStatus}`"
+              >
+                {{ draftSyncText }}
+              </span>
             </div>
             <div class="editor-header-right">
               <button
@@ -880,8 +1548,45 @@ const handleLogout = () => {
                 <button
                   type="button"
                   class="btn-icon-refresh"
-                  aria-label="还原到默认的代码模版"
-                  title="还原到默认的代码模版"
+                  aria-label="Format code"
+                  title="Format code (Ctrl+Alt+L / Cmd+Option+L)"
+                  data-testid="format-code-button"
+                  @click="handleFormatCodeClick"
+                >
+                  <span class="btn-icon-text" aria-hidden="true">{{ '{ }' }}</span>
+                </button>
+              </div>
+              <div class="icon-hint-wrapper">
+                <button
+                  type="button"
+                  class="btn-icon-refresh"
+                  aria-label="Toggle line comment"
+                  title="Toggle line comment (Ctrl/Cmd+/)"
+                  data-testid="comment-code-button"
+                  @click="handleToggleCommentClick"
+                >
+                  <span class="btn-icon-text" aria-hidden="true">//</span>
+                </button>
+              </div>
+              <div class="icon-hint-wrapper">
+                <button
+                  type="button"
+                  class="btn-icon-refresh"
+                  aria-label="Show shortcuts"
+                  title="Show shortcuts"
+                  data-testid="shortcut-help-button"
+                  @click="openShortcutTips"
+                >
+                  <span class="btn-icon-text" aria-hidden="true">?</span>
+                </button>
+              </div>
+              <div class="icon-hint-wrapper">
+                <button
+                  type="button"
+                  class="btn-icon-refresh"
+                  aria-label="Reset code to default template"
+                  title="Reset code to default template"
+                  data-testid="reset-code-button"
                   @click="resetCodeToDefault"
                 >
                   <svg class="btn-icon-refresh__glyph" viewBox="0 0 24 24" aria-hidden="true">
@@ -923,9 +1628,20 @@ const handleLogout = () => {
                 v-model="code"
                 class="code-editor"
                 spellcheck="false"
+                @input="handleCodeEditorInput"
+                @keydown="handleCodeEditorKeydown"
+                @click="updateCodeCursorPosition"
+                @keyup="updateCodeCursorPosition"
+                @select="updateCodeCursorPosition"
                 @scroll="syncCodeScroll"
               />
             </div>
+            <footer class="code-editor-status" data-testid="code-editor-status-bar">
+              <span>{{ activeLanguage }}</span>
+              <span>行 {{ codeCursorLine }}，列 {{ codeCursorColumn }}</span>
+              <span>{{ draftSyncText }}</span>
+              <span>{{ codeLineCount }} 行</span>
+            </footer>
           </section>
         </div>
 
@@ -1046,6 +1762,304 @@ const handleLogout = () => {
         </div>
       </section>
     </main>
+    <div v-if="runDialogVisible" class="submit-dialog-mask" @click.self="closeRunDialog">
+      <section
+        class="submit-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label="运行详情"
+        data-testid="run-result-dialog"
+      >
+        <header class="submit-dialog__header">
+          <div>
+            <h2 class="submit-dialog__title">运行详情</h2>
+            <p class="submit-dialog__subtitle">
+              {{ problemDetail ? `P${String(problemDetail.problemNo).padStart(4, '0')} · ${problemDetail.title}` : '当前题目' }}
+            </p>
+          </div>
+          <button
+            type="button"
+            class="submit-dialog__close"
+            :disabled="runPending"
+            aria-label="关闭运行详情"
+            @click="closeRunDialog"
+          >
+            ×
+          </button>
+        </header>
+
+        <div v-if="runPending" class="submit-progress" data-testid="run-result-pending">
+          <span class="submit-progress__spinner" aria-hidden="true" />
+          <div>
+            <strong>运行中</strong>
+            <p>正在按顺序运行测试用例，遇到首个未通过用例会停止。</p>
+          </div>
+        </div>
+
+        <div v-else-if="runError" class="submit-alert submit-alert--error submit-alert--with-action">
+          <span>{{ runError }}</span>
+          <button type="button" class="copy-error-btn" @click="copyErrorText(runError)">复制错误</button>
+        </div>
+
+        <template v-else-if="runResult">
+          <div class="submit-summary" :class="`submit-summary--${runResult.status.toLowerCase()}`">
+            <div>
+              <span class="submit-summary__label">状态</span>
+              <strong>{{ statusText(runResult.status) }}</strong>
+            </div>
+            <div>
+              <span class="submit-summary__label">通过用例</span>
+              <strong>{{ runPassedCaseCount }} / {{ runResult.caseResults?.length ?? 0 }}</strong>
+            </div>
+            <div>
+              <span class="submit-summary__label">已运行用例</span>
+              <strong>{{ runResult.caseResults?.length ?? 0 }}</strong>
+            </div>
+            <div>
+              <span class="submit-summary__label">运行耗时</span>
+              <strong>{{ runTotalTimeMs ?? '--' }} ms</strong>
+            </div>
+          </div>
+
+          <div
+            class="submit-alert"
+            :class="runResult.caseResults?.every((item) => item.status === 'AC') ? 'submit-alert--success' : 'submit-alert--error'"
+          >
+            {{
+              runResult.caseResults?.every((item) => item.status === 'AC')
+                ? '测试通过。'
+                : '测试未通过，已停止后续用例。'
+            }}
+          </div>
+
+          <div class="submit-case-list">
+            <article
+              v-for="(item, index) in runResult.caseResults"
+              :key="`${item.caseType}-${item.caseIndex}`"
+              class="submit-case"
+              :class="`submit-case--${item.status.toLowerCase()}`"
+              data-testid="run-case-result"
+            >
+              <header class="submit-case__header">
+                <strong>{{ caseTitle(item, index) }}</strong>
+                <span>{{ statusText(item.status) }} · {{ item.timeMs ?? '--' }} ms</span>
+              </header>
+              <div class="submit-case__grid">
+                <div>
+                  <span>输入</span>
+                  <pre>{{ caseDisplayText(item.inputText) }}</pre>
+                </div>
+                <div>
+                  <span>期望输出</span>
+                  <pre>{{ caseDisplayText(item.expectedOutput) }}</pre>
+                </div>
+                <div>
+                  <span>实际输出</span>
+                  <pre>{{ caseDisplayText(item.actualOutput) }}</pre>
+                </div>
+                <div v-if="item.errorOutput || item.message">
+                  <span>错误信息</span>
+                  <button type="button" class="copy-error-btn copy-error-btn--inline" @click="copyErrorText(item.errorOutput || item.message)">
+                    复制错误
+                  </button>
+                  <pre>{{ caseDisplayText(item.errorOutput || item.message) }}</pre>
+                </div>
+              </div>
+            </article>
+          </div>
+        </template>
+      </section>
+    </div>
+
+    <div v-if="submitDialogVisible" class="submit-dialog-mask" @click.self="closeSubmitDialog">
+      <section class="submit-dialog" role="dialog" aria-modal="true" aria-label="提交详情">
+        <header class="submit-dialog__header">
+          <div>
+            <h2 class="submit-dialog__title">提交详情</h2>
+            <p class="submit-dialog__subtitle">
+              {{ problemDetail ? `P${String(problemDetail.problemNo).padStart(4, '0')} · ${problemDetail.title}` : '当前题目' }}
+            </p>
+          </div>
+          <button
+            type="button"
+            class="submit-dialog__close"
+            :disabled="submitPending"
+            aria-label="关闭提交详情"
+            @click="closeSubmitDialog"
+          >
+            ×
+          </button>
+        </header>
+
+        <div v-if="submitPending" class="submit-progress">
+          <span class="submit-progress__spinner" aria-hidden="true" />
+          <div>
+            <strong>判题中</strong>
+            <p>正在运行公开样例和隐藏用例。</p>
+          </div>
+        </div>
+
+        <div v-else-if="submitError" class="submit-alert submit-alert--error submit-alert--with-action">
+          <span>{{ submitError }}</span>
+          <button type="button" class="copy-error-btn" @click="copyErrorText(submitError)">复制错误</button>
+        </div>
+
+        <template v-else-if="submitResult">
+          <div class="submit-detail-layout">
+            <section class="submit-info-card">
+              <div class="submit-summary submit-summary--compact" :class="`submit-summary--${submitResult.status.toLowerCase()}`">
+                <div>
+                  <span class="submit-summary__label">状态</span>
+                  <strong>{{ statusText(submitResult.status) }}</strong>
+                </div>
+                <div>
+                  <span class="submit-summary__label">通过用例</span>
+                  <strong>{{ passedCaseCount }} / {{ submitTotalCaseCount }}</strong>
+                </div>
+                <div>
+                  <span class="submit-summary__label">题目耗时</span>
+                  <strong>{{ submitResult.timeMs ?? '--' }} ms</strong>
+                </div>
+              </div>
+
+              <div v-if="submitResult.status === 'AC'" class="submit-alert submit-alert--success">
+                已通过本题，按单个最慢用例耗时进入速度排名。
+              </div>
+              <div v-else class="submit-alert submit-alert--error">
+                {{ submitResult.message || statusText(submitResult.status) }}
+              </div>
+
+              <article
+                v-if="submitFailedCase"
+                class="submit-case"
+                :class="`submit-case--${submitFailedCase.status.toLowerCase()}`"
+                data-testid="submit-case-result"
+              >
+                <header class="submit-case__header">
+                  <strong>{{ caseTitle(submitFailedCase, submitFailedCase.caseIndex) }}</strong>
+                  <span>{{ statusText(submitFailedCase.status) }} · {{ submitFailedCase.timeMs ?? '--' }} ms</span>
+                </header>
+                <div class="submit-case__grid">
+                  <div>
+                    <span>输入</span>
+                    <pre>{{ caseDisplayText(submitFailedCase.inputText) }}</pre>
+                  </div>
+                  <div>
+                    <span>期望输出</span>
+                    <pre>{{ caseDisplayText(submitFailedCase.expectedOutput) }}</pre>
+                  </div>
+                  <div>
+                    <span>实际输出</span>
+                    <pre>{{ caseDisplayText(submitFailedCase.actualOutput) }}</pre>
+                  </div>
+                  <div v-if="submitFailedCase.errorOutput || submitFailedCase.message">
+                    <span>错误信息</span>
+                    <button
+                      type="button"
+                      class="copy-error-btn copy-error-btn--inline"
+                      @click="copyErrorText(submitFailedCase.errorOutput || submitFailedCase.message)"
+                    >
+                      复制错误
+                    </button>
+                    <pre>{{ caseDisplayText(submitFailedCase.errorOutput || submitFailedCase.message) }}</pre>
+                  </div>
+                </div>
+              </article>
+            </section>
+
+            <aside class="submit-rank-card">
+              <div class="submit-rank-head">
+                <div>
+                  <span class="submit-summary__label">速度排名</span>
+                  <strong>{{ submitResult.rank ? `第 ${submitResult.rank} 名` : '--' }}</strong>
+                </div>
+                <div>
+                  <span class="submit-summary__label">AC 提交数</span>
+                  <strong>{{ submitResult.rankStats?.acceptedCount ?? '--' }}</strong>
+                </div>
+              </div>
+
+              <section class="rank-chart">
+                <h3>耗时分布</h3>
+                <div v-if="submitTimeBuckets.length" class="rank-column-chart">
+                  <div
+                    v-for="bucket in submitTimeBuckets"
+                    :key="`time-${bucket.label}`"
+                    class="rank-column"
+                  >
+                    <strong>{{ bucket.count }}</strong>
+                    <div class="rank-column-track">
+                      <i
+                        :style="{ height: bucketPercent(bucket.count, submitTimeBuckets) }"
+                        data-testid="time-bucket-bar"
+                      />
+                    </div>
+                    <span>{{ bucket.label }}</span>
+                  </div>
+                </div>
+                <p v-else class="rank-chart-empty">暂无耗时分布数据</p>
+              </section>
+            </aside>
+          </div>
+        </template>
+      </section>
+    </div>
+
+    <div v-if="shortcutTipsVisible" class="submit-dialog-mask" @click.self="closeShortcutTips">
+      <section
+        class="shortcut-tips-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label="代码编辑器快捷键"
+        data-testid="shortcut-tips-dialog"
+      >
+        <header class="shortcut-tips-dialog__header">
+          <div>
+            <h2 class="shortcut-tips-dialog__title">代码编辑器快捷键</h2>
+            <p class="shortcut-tips-dialog__subtitle">这些快捷键只在右侧代码编辑区生效。</p>
+          </div>
+          <button
+            type="button"
+            class="submit-dialog__close"
+            aria-label="关闭快捷键提示"
+            @click="closeShortcutTips"
+          >
+            ×
+          </button>
+        </header>
+
+        <div class="shortcut-tips-list">
+          <div
+            v-for="item in shortcutTipItems"
+            :key="item.keys"
+            class="shortcut-tip-item"
+          >
+            <kbd>{{ item.keys }}</kbd>
+            <span>{{ item.action }}</span>
+          </div>
+        </div>
+
+        <footer class="shortcut-tips-dialog__footer">
+          <label class="shortcut-tips-checkbox">
+            <input
+              v-model="shortcutTipsDontShowAgain"
+              type="checkbox"
+              data-testid="shortcut-tips-dont-show"
+            >
+            <span>以后不再提示</span>
+          </label>
+          <button
+            type="button"
+            class="btn-primary"
+            data-testid="shortcut-tips-close"
+            @click="closeShortcutTips"
+          >
+            我知道了
+          </button>
+        </footer>
+      </section>
+    </div>
+
     <LoginDialog v-model="showLogin" />
   </div>
 </template>
@@ -1059,6 +2073,487 @@ const handleLogout = () => {
   overflow: hidden;
   padding: 8px 16px 16px;
   box-sizing: border-box;
+}
+
+.submit-dialog-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(17, 24, 39, 0.42);
+}
+
+.submit-dialog {
+  width: min(920px, 100%);
+  max-height: min(760px, calc(100vh - 48px));
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  box-shadow: 0 18px 46px rgba(15, 23, 42, 0.24);
+}
+
+.submit-dialog__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.submit-dialog__title {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.3;
+  color: #111827;
+}
+
+.submit-dialog__subtitle {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.submit-dialog__close {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #374151;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.submit-dialog__close:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.shortcut-tips-dialog {
+  width: min(560px, 100%);
+  max-height: min(620px, calc(100vh - 48px));
+  overflow: hidden;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.24);
+  display: flex;
+  flex-direction: column;
+}
+
+.shortcut-tips-dialog__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.shortcut-tips-dialog__title {
+  margin: 0;
+  font-size: 18px;
+  color: #111827;
+}
+
+.shortcut-tips-dialog__subtitle {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.shortcut-tips-list {
+  display: grid;
+  gap: 8px;
+  padding: 16px 20px;
+  overflow-y: auto;
+}
+
+.shortcut-tip-item {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.95fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 9px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f9fafb;
+}
+
+.shortcut-tip-item kbd {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  padding: 4px 8px;
+  border: 1px solid #d1d5db;
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #111827;
+  font-family: SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.3;
+  white-space: normal;
+}
+
+.shortcut-tip-item span {
+  min-width: 0;
+  color: #374151;
+  font-size: 13px;
+}
+
+.shortcut-tips-dialog__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 20px 18px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.shortcut-tips-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #4b5563;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.shortcut-tips-checkbox input {
+  width: 14px;
+  height: 14px;
+  accent-color: #16a34a;
+}
+
+.submit-progress,
+.submit-alert,
+.submit-summary,
+.submit-case-list {
+  margin: 16px 20px 0;
+}
+
+.submit-progress {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1e3a8a;
+}
+
+.submit-progress p {
+  margin: 4px 0 0;
+  color: #3b4f7a;
+}
+
+.submit-progress__spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid #bfdbfe;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: submit-spin 0.8s linear infinite;
+}
+
+.submit-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.submit-summary > div {
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f9fafb;
+}
+
+.submit-summary__label {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.submit-summary strong {
+  font-size: 17px;
+  color: #111827;
+}
+
+.submit-detail-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+  gap: 16px;
+  margin: 16px 20px 20px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.submit-info-card,
+.submit-rank-card {
+  min-width: 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.submit-info-card {
+  padding: 14px;
+}
+
+.submit-rank-card {
+  padding: 14px;
+  background: #f9fafb;
+}
+
+.submit-info-card .submit-summary,
+.submit-info-card .submit-alert,
+.submit-info-card .submit-case,
+.submit-rank-card .rank-chart {
+  margin: 0;
+}
+
+.submit-info-card .submit-summary {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.submit-info-card .submit-alert,
+.submit-info-card .submit-case {
+  margin-top: 12px;
+}
+
+.submit-summary--compact {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.submit-rank-head {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.submit-rank-head > div {
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.submit-rank-head strong {
+  font-size: 17px;
+  color: #111827;
+}
+
+.rank-chart {
+  margin-top: 14px;
+}
+
+.rank-chart h3 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #111827;
+}
+
+.rank-column-chart {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(42px, 1fr));
+  align-items: end;
+  gap: 8px;
+  min-height: 190px;
+  padding: 8px 4px 0;
+}
+
+.rank-column {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: 18px 132px auto;
+  align-items: end;
+  justify-items: center;
+  gap: 6px;
+}
+
+.rank-column strong {
+  color: #111827;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.rank-column-track {
+  width: 100%;
+  max-width: 34px;
+  height: 132px;
+  display: flex;
+  align-items: flex-end;
+  border-radius: 8px 8px 4px 4px;
+  background: #e5e7eb;
+  overflow: hidden;
+}
+
+.rank-column-track i {
+  display: block;
+  width: 100%;
+  min-height: 3px;
+  border-radius: 8px 8px 0 0;
+  background: #2563eb;
+}
+
+.rank-column span {
+  max-width: 58px;
+  min-height: 28px;
+  color: #4b5563;
+  font-size: 11px;
+  line-height: 1.25;
+  text-align: center;
+  word-break: break-word;
+}
+
+.rank-chart-empty {
+  margin: 0;
+  padding: 12px;
+  border: 1px dashed #d1d5db;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.submit-alert {
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.submit-alert--success {
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.submit-alert--error {
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.submit-case-list {
+  padding-bottom: 18px;
+  overflow: auto;
+}
+
+.submit-case {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.submit-case + .submit-case {
+  margin-top: 12px;
+}
+
+.submit-case__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+  color: #111827;
+}
+
+.submit-case__header span {
+  color: #4b5563;
+  font-size: 13px;
+}
+
+.submit-case--ac .submit-case__header {
+  background: #f0fdf4;
+}
+
+.submit-case--wa .submit-case__header,
+.submit-case--re .submit-case__header,
+.submit-case--tle .submit-case__header,
+.submit-case--ce .submit-case__header,
+.submit-case--system_error .submit-case__header {
+  background: #fef2f2;
+}
+
+.submit-case__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 12px;
+}
+
+.submit-case__grid span {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.submit-case__grid pre {
+  min-height: 42px;
+  max-height: 150px;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: 9px;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+  background: #f8fafc;
+  color: #111827;
+  font-family: SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.submit-alert--with-action {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.copy-error-btn {
+  flex: 0 0 auto;
+  border: 1px solid #fecaca;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #991b1b;
+  padding: 3px 9px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.copy-error-btn:hover {
+  background: #fff1f2;
+}
+
+.copy-error-btn--inline {
+  margin: 0 0 5px 8px;
+  padding: 2px 8px;
+}
+
+@keyframes submit-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .solve-header {
@@ -1546,6 +3041,39 @@ code {
   color: #111827;
 }
 
+.draft-sync {
+  display: inline-flex;
+  align-items: center;
+  min-width: 54px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+  color: #6b7280;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.draft-sync--saving,
+.draft-sync--loading {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.draft-sync--saved {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.draft-sync--error {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
 .editor-header-right {
   display: flex;
   align-items: center;
@@ -1655,11 +3183,20 @@ code {
   display: block;
 }
 
+.btn-icon-text {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .editor-body {
   flex: 1;
   padding: 8px 12px;
   min-height: 0;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .editor-inner-splitter {
@@ -1709,12 +3246,29 @@ code {
   display: flex;
   flex: 1;
   min-height: 0;
-  height: 100%;
   border-radius: 8px;
   border: 1px solid #e5e7eb;
   background-color: #ffffff;
   overflow: hidden;
   box-sizing: border-box;
+}
+
+.code-editor-status {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  min-height: 22px;
+  padding: 0 2px;
+  color: #6b7280;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.code-editor-status span + span {
+  padding-left: 12px;
+  border-left: 1px solid #e5e7eb;
 }
 
 .code-line-numbers {

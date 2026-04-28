@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 
 const ADMIN_EMAIL = 'admin@qq.com'
-const USER_EMAIL = 'test_user@qq.com'
+const USER_EMAIL = 'user@qq.com'
 const PASSWORD = '123456'
 
 async function uiLogin(page: import('@playwright/test').Page, account: string) {
@@ -46,6 +46,7 @@ test('草稿→管理端发布→学员端可见', async ({ page, request }) => 
   // 2) 管理员 UI 发布
   await uiLogin(page, ADMIN_EMAIL)
   await page.goto('/admin/problems')
+  await page.getByRole('tab', { name: '待审核（草稿）' }).click()
 
   // 搜索刚创建的草稿
   await page.getByPlaceholder('按标题搜索').fill(title)
@@ -57,6 +58,7 @@ test('草稿→管理端发布→学员端可见', async ({ page, request }) => 
 
   // 3) 学员端可见
   await page.goto('/problemset')
+  await page.locator('.search-input').fill(title)
   await expect(page.getByRole('link', { name: title })).toBeVisible()
 })
 

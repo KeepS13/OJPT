@@ -7,7 +7,7 @@ import { RouterLink } from 'vue-router'
     <div class="hero">
       <div class="hero__copy">
         <span class="hero__eyebrow">Personal Training Desk</span>
-        <h1 class="hero__title">一个更像你自己练算法时会打开的首页。</h1>
+        <h1 class="hero__title">一个更像你自己练算法时会打开的平台。</h1>
         <p class="hero__subtitle">
           少一点平台感，多一点训练感。直接进题、直接写代码、直接按标准输入输出思考，保持节奏，把注意力留给题目本身。
         </p>

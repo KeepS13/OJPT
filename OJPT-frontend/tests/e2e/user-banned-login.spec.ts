@@ -3,10 +3,6 @@ import { test, expect } from '@playwright/test'
 const ADMIN_EMAIL = 'admin@qq.com'
 const PASSWORD = '123456'
 
-// 来自 Flyway 预置数据：V1_1__init_user_data.sql
-const ONLY_SCHOOL_EMAIL = 'only_school@qq.com'
-const ONLY_SCHOOL_USER_ID = '1998338632572506119'
-
 async function loginApi(request: import('@playwright/test').APIRequestContext, account: string) {
   const res = await request.post('http://localhost:8111/api/auth/login', {
     headers: { 'Content-Type': 'application/json' },
@@ -19,18 +15,45 @@ async function loginApi(request: import('@playwright/test').APIRequestContext, a
   return accessToken as string
 }
 
-async function blacklistUser(
+async function registerUserApi(request: import('@playwright/test').APIRequestContext) {
+  const stamp = String(Date.now())
+  const account = `ban_e2e_${stamp}@example.com`
+  const res = await request.post('http://localhost:8111/api/auth/register', {
+    headers: { 'Content-Type': 'application/json' },
+    data: {
+      account,
+      password: PASSWORD,
+      nickname: `ban_e2e_${stamp.slice(-8)}`,
+      gender: 1,
+      birthday: '2000-01-01',
+    },
+  })
+  expect(res.status()).toBe(200)
+  const rawBody = await res.text()
+  const body = JSON.parse(rawBody)
+  expect(body?.code).toBe(200)
+  const userId = rawBody.match(/"userId"\s*:\s*"?(\d+)"?/)?.[1]
+  expect(userId).toBeTruthy()
+  return {
+    account,
+    userId: userId as string,
+  }
+}
+
+async function updateUserStatus(
   request: import('@playwright/test').APIRequestContext,
   accessToken: string,
   userId: string,
-  durationSeconds: number
+  status: number
 ) {
-  const res = await request.post(
-    `http://localhost:8111/api/admin/users/${userId}/blacklist?durationSeconds=${durationSeconds}`,
+  const res = await request.put(
+    `http://localhost:8111/api/admin/users/${userId}/status`,
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
       },
+      data: { status },
     }
   )
   expect(res.status()).toBe(200)
@@ -38,43 +61,24 @@ async function blacklistUser(
   expect(body?.code).toBe(200)
 }
 
-async function unblacklistUser(
-  request: import('@playwright/test').APIRequestContext,
-  accessToken: string,
-  userId: string
-) {
-  const res = await request.delete(`http://localhost:8111/api/admin/users/${userId}/blacklist`, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-  })
-  expect(res.status()).toBe(200)
-  const body = await res.json()
-  expect(body?.code).toBe(200)
-}
-
-test('封禁 only_school 后，前端登录应提示封禁剩余时间', async ({ page, request }) => {
+test('禁用用户后，前端登录应提示账号不可用', async ({ page, request }) => {
   const adminAccessToken = await loginApi(request, ADMIN_EMAIL)
+  const targetUser = await registerUserApi(request)
 
-  // 先确保处于“未封禁”状态，避免历史数据影响
-  await unblacklistUser(request, adminAccessToken, ONLY_SCHOOL_USER_ID)
-
-  // 封禁 120s：测试时足够稳定，也不会影响太久
-  await blacklistUser(request, adminAccessToken, ONLY_SCHOOL_USER_ID, 120)
+  await updateUserStatus(request, adminAccessToken, targetUser.userId, 0)
 
   try {
     await page.goto('/')
     await page.getByTestId('nav-login-button').click()
 
-    await page.getByTestId('login-account-input').fill(ONLY_SCHOOL_EMAIL)
+    await page.getByTestId('login-account-input').fill(targetUser.account)
     await page.getByTestId('login-password-input').fill(PASSWORD)
     await page.getByTestId('login-submit-button').click()
 
     const toast = page.locator('.el-message--error')
-    await expect(toast).toContainText('账号已被封禁')
-    await expect(toast).toContainText('剩余')
+    await expect(toast).toContainText(/账号不可用|帐号已被锁定|账号已被锁定/)
   } finally {
     // 清理：恢复账号，避免影响其他用例/手工联调
-    await unblacklistUser(request, adminAccessToken, ONLY_SCHOOL_USER_ID)
+    await updateUserStatus(request, adminAccessToken, targetUser.userId, 1)
   }
 })

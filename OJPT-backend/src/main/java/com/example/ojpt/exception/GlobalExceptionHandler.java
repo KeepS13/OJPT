@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
+import org.springframework.security.authentication.LockedException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -88,6 +89,16 @@ public class GlobalExceptionHandler {
         }
         log.warn("账号不可用: {}", message);
         Result<Void> result = Result.error(ErrorCode.ACCOUNT_DISABLED.getCode(), message);
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(result);
+    }
+
+    /**
+     * 处理账号锁定/禁用。
+     */
+    @ExceptionHandler(LockedException.class)
+    public ResponseEntity<Result<Void>> handleLockedException(LockedException ex) {
+        log.warn("账号已被锁定: {}", ex.getMessage());
+        Result<Void> result = Result.error(ErrorCode.ACCOUNT_DISABLED.getCode(), "账号已被锁定");
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(result);
     }
 
@@ -220,4 +231,3 @@ public class GlobalExceptionHandler {
         return HttpStatus.INTERNAL_SERVER_ERROR;
     }
 }
-

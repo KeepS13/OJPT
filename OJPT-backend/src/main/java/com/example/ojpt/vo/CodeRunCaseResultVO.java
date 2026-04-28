@@ -7,6 +7,7 @@ import lombok.Data;
 @AllArgsConstructor
 public class CodeRunCaseResultVO {
     private Integer caseIndex;
+    private String caseType;
     private String status;
     private String inputText;
     private String expectedOutput;

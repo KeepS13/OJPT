@@ -8,6 +8,7 @@ import com.example.ojpt.entity.UserProblemProgress;
 import com.example.ojpt.judge.CodeExecutionResult;
 import com.example.ojpt.judge.CodeExecutionService;
 import com.example.ojpt.mapper.ProblemMapper;
+import com.example.ojpt.mapper.SubmissionCaseResultMapper;
 import com.example.ojpt.mapper.ProblemTestCaseMapper;
 import com.example.ojpt.mapper.SubmissionMapper;
 import com.example.ojpt.mapper.UserProblemProgressMapper;
@@ -22,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -33,12 +35,14 @@ class SubmissionCreationServiceTest {
         ProblemMapper problemMapper = mock(ProblemMapper.class);
         UserProblemProgressMapper progressMapper = mock(UserProblemProgressMapper.class);
         ProblemTestCaseMapper judgeCaseMapper = mock(ProblemTestCaseMapper.class);
+        SubmissionCaseResultMapper caseResultMapper = mock(SubmissionCaseResultMapper.class);
         CodeExecutionService codeExecutionService = mock(CodeExecutionService.class);
         SubmissionService service = new SubmissionServiceImpl(
                 submissionMapper,
                 problemMapper,
                 progressMapper,
                 judgeCaseMapper,
+                caseResultMapper,
                 codeExecutionService
         );
 
@@ -56,8 +60,14 @@ class SubmissionCreationServiceTest {
         when(judgeCaseMapper.selectList(any())).thenReturn(List.of(
                 new ProblemTestCase()
                         .setProblemId(2100000000000000001L)
-                        .setCaseType("HIDDEN")
+                        .setCaseType("SAMPLE")
                         .setSortOrder(1)
+                        .setInputText("4\n2 7 11 15\n9\n")
+                        .setExpectedOutput("0 1"),
+                new ProblemTestCase()
+                        .setProblemId(2100000000000000001L)
+                        .setCaseType("HIDDEN")
+                        .setSortOrder(2)
                         .setInputText("4\n2 7 11 15\n9\n")
                         .setExpectedOutput("0 1")
         ));
@@ -71,6 +81,11 @@ class SubmissionCreationServiceTest {
                         .timeMs(12L)
                         .build()
         );
+        when(submissionMapper.selectList(any())).thenReturn(List.of(
+                new Submission().setProblemId(2100000000000000001L).setStatus("AC").setTimeMs(12),
+                new Submission().setProblemId(2100000000000000001L).setStatus("AC").setTimeMs(36),
+                new Submission().setProblemId(2100000000000000001L).setStatus("AC").setTimeMs(140)
+        ));
         doAnswer(invocation -> {
             Submission submission = invocation.getArgument(0);
             if (submission.getId() == null) {
@@ -89,6 +104,19 @@ class SubmissionCreationServiceTest {
         assertEquals(2300000000000000009L, result.getSubmissionId());
         assertEquals("AC", result.getStatus());
         assertEquals("判题通过", result.getMessage());
+        assertEquals(12, result.getTimeMs());
+        assertEquals(1, result.getRank());
+        assertEquals(2, result.getTotalCaseCount());
+        assertEquals(3, result.getRankStats().getAcceptedCount());
+        assertEquals("12-33 ms", result.getRankStats().getTimeBuckets().get(0).getLabel());
+        assertEquals(1, result.getRankStats().getTimeBuckets().get(0).getCount());
+        assertEquals("34-55 ms", result.getRankStats().getTimeBuckets().get(1).getLabel());
+        assertEquals(1, result.getRankStats().getTimeBuckets().get(1).getCount());
+        assertEquals("122-143 ms", result.getRankStats().getTimeBuckets().get(5).getLabel());
+        assertEquals(1, result.getRankStats().getTimeBuckets().get(5).getCount());
+        assertEquals(2, result.getCaseResults().size());
+        assertEquals("SAMPLE", result.getCaseResults().get(0).getCaseType());
+        assertEquals("HIDDEN", result.getCaseResults().get(1).getCaseType());
         assertEquals(11L, problem.getSubmitCount());
         assertEquals(6L, problem.getAcceptedCount());
         verify(problemMapper, org.mockito.Mockito.times(2)).updateById(problem);
@@ -101,12 +129,14 @@ class SubmissionCreationServiceTest {
         ProblemMapper problemMapper = mock(ProblemMapper.class);
         UserProblemProgressMapper progressMapper = mock(UserProblemProgressMapper.class);
         ProblemTestCaseMapper judgeCaseMapper = mock(ProblemTestCaseMapper.class);
+        SubmissionCaseResultMapper caseResultMapper = mock(SubmissionCaseResultMapper.class);
         CodeExecutionService codeExecutionService = mock(CodeExecutionService.class);
         SubmissionService service = new SubmissionServiceImpl(
                 submissionMapper,
                 problemMapper,
                 progressMapper,
                 judgeCaseMapper,
+                caseResultMapper,
                 codeExecutionService
         );
 
@@ -162,8 +192,93 @@ class SubmissionCreationServiceTest {
         assertEquals(2300000000000000010L, result.getSubmissionId());
         assertEquals("WA", result.getStatus());
         assertEquals("答案错误", result.getMessage());
+        assertEquals(9, result.getTimeMs());
+        assertEquals(null, result.getRank());
+        assertEquals(1, result.getCaseResults().size());
+        assertEquals("WA", result.getCaseResults().get(0).getStatus());
+        assertEquals("0 2", result.getCaseResults().get(0).getActualOutput());
         assertEquals("ATTEMPTED", progress.getStatus());
         assertEquals(2300000000000000010L, progress.getLastSubmissionId());
         verify(progressMapper).updateById(progress);
+    }
+
+    @Test
+    void createSubmission_stopsAfterFirstFailedCase() {
+        SubmissionMapper submissionMapper = mock(SubmissionMapper.class);
+        ProblemMapper problemMapper = mock(ProblemMapper.class);
+        UserProblemProgressMapper progressMapper = mock(UserProblemProgressMapper.class);
+        ProblemTestCaseMapper judgeCaseMapper = mock(ProblemTestCaseMapper.class);
+        SubmissionCaseResultMapper caseResultMapper = mock(SubmissionCaseResultMapper.class);
+        CodeExecutionService codeExecutionService = mock(CodeExecutionService.class);
+        SubmissionService service = new SubmissionServiceImpl(
+                submissionMapper,
+                problemMapper,
+                progressMapper,
+                judgeCaseMapper,
+                caseResultMapper,
+                codeExecutionService
+        );
+
+        Problem problem = new Problem()
+                .setId(2100000000000000002L)
+                .setProblemNo(2)
+                .setStatus("PUBLISHED")
+                .setSubmitCount(0L)
+                .setAcceptedCount(0L)
+                .setTimeLimitMs(1000)
+                .setMemoryLimitKb(256000);
+        when(problemMapper.selectOne(any())).thenReturn(problem);
+        when(progressMapper.selectOne(any())).thenReturn(null);
+        when(judgeCaseMapper.selectList(any())).thenReturn(List.of(
+                new ProblemTestCase()
+                        .setProblemId(2100000000000000002L)
+                        .setCaseType("SAMPLE")
+                        .setSortOrder(1)
+                        .setInputText("abcabcbb")
+                        .setExpectedOutput("3"),
+                new ProblemTestCase()
+                        .setProblemId(2100000000000000002L)
+                        .setCaseType("SAMPLE")
+                        .setSortOrder(2)
+                        .setInputText("bbbbb")
+                        .setExpectedOutput("1"),
+                new ProblemTestCase()
+                        .setProblemId(2100000000000000002L)
+                        .setCaseType("HIDDEN")
+                        .setSortOrder(3)
+                        .setInputText("pwwkew")
+                        .setExpectedOutput("3")
+        ));
+        when(codeExecutionService.execute(any(), any(), any(), any(), any())).thenReturn(
+                CodeExecutionResult.builder()
+                        .compileSuccess(true)
+                        .runtimeSuccess(true)
+                        .timedOut(false)
+                        .stdout("")
+                        .stderr("")
+                        .timeMs(7L)
+                        .build()
+        );
+        doAnswer(invocation -> {
+            Submission submission = invocation.getArgument(0);
+            if (submission.getId() == null) {
+                submission.setId(2300000000000000011L);
+            }
+            return 1;
+        }).when(submissionMapper).insert(any(Submission.class));
+
+        SubmissionCreateDTO dto = new SubmissionCreateDTO();
+        dto.setLanguage("Python3");
+        dto.setSourceCode("print('')");
+
+        SubmissionCreateResultVO result = service.createSubmission(1001L, 2, dto);
+
+        assertEquals("WA", result.getStatus());
+        assertEquals(3, result.getTotalCaseCount());
+        assertEquals(1, result.getCaseResults().size());
+        assertEquals("SAMPLE", result.getCaseResults().get(0).getCaseType());
+        assertEquals("abcabcbb", result.getCaseResults().get(0).getInputText());
+        verify(codeExecutionService, times(1)).execute(any(), any(), any(), any(), any());
+        verify(caseResultMapper, times(1)).insert(any());
     }
 }

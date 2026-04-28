@@ -25,9 +25,15 @@ describe('problem submit api', () => {
       sourceCode: 'public class Main {}',
     })
 
-    expect(postMock).toHaveBeenCalledWith('/problems/no/1/submissions', {
-      language: 'Java',
-      sourceCode: 'public class Main {}',
-    })
+    expect(postMock).toHaveBeenCalledWith(
+      '/problems/no/1/submissions',
+      {
+        language: 'Java',
+        sourceCode: 'public class Main {}',
+      },
+      {
+        timeout: 60000,
+      },
+    )
   })
 })

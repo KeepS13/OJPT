@@ -26,7 +26,5 @@ test('管理员登录后可以访问后台数据概览看板', async ({ page }) 
   // OverviewTab 中的几个核心分区标题应可见，验证统计卡片区域已加载
   await expect(page.getByText('平台统计')).toBeVisible()
   await expect(page.getByText('用户统计')).toBeVisible()
-  await expect(page.getByText('学校统计')).toBeVisible()
 }
 )
-

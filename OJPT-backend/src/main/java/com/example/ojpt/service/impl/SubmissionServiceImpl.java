@@ -9,18 +9,22 @@ import com.example.ojpt.dto.SubmissionCreateDTO;
 import com.example.ojpt.entity.Problem;
 import com.example.ojpt.entity.ProblemTestCase;
 import com.example.ojpt.entity.Submission;
+import com.example.ojpt.entity.SubmissionCaseResult;
 import com.example.ojpt.entity.UserProblemProgress;
 import com.example.ojpt.exception.BusinessException;
 import com.example.ojpt.judge.CodeExecutionResult;
 import com.example.ojpt.judge.CodeExecutionService;
 import com.example.ojpt.mapper.ProblemMapper;
 import com.example.ojpt.mapper.ProblemTestCaseMapper;
+import com.example.ojpt.mapper.SubmissionCaseResultMapper;
 import com.example.ojpt.mapper.SubmissionMapper;
 import com.example.ojpt.mapper.UserProblemProgressMapper;
 import com.example.ojpt.service.SubmissionService;
 import com.example.ojpt.vo.CodeRunCaseResultVO;
 import com.example.ojpt.vo.CodeRunResultVO;
+import com.example.ojpt.vo.DistributionBucketVO;
 import com.example.ojpt.vo.SubmissionCreateResultVO;
+import com.example.ojpt.vo.SubmissionRankStatsVO;
 import com.example.ojpt.vo.UserSubmissionRecordVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -28,6 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Comparator;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -44,7 +49,9 @@ public class SubmissionServiceImpl implements SubmissionService {
     private static final String STATUS_RE = "RE";
     private static final String STATUS_TLE = "TLE";
     private static final String STATUS_SYSTEM_ERROR = "SYSTEM_ERROR";
+    private static final String CASE_TYPE_SAMPLE = "SAMPLE";
     private static final String CASE_TYPE_HIDDEN = "HIDDEN";
+    private static final String CASE_TYPE_CUSTOM = "CUSTOM";
     private static final String PROGRESS_ATTEMPTED = "ATTEMPTED";
     private static final String PROGRESS_SOLVED = "SOLVED";
 
@@ -52,6 +59,7 @@ public class SubmissionServiceImpl implements SubmissionService {
     private final ProblemMapper problemMapper;
     private final UserProblemProgressMapper userProblemProgressMapper;
     private final ProblemTestCaseMapper problemTestCaseMapper;
+    private final SubmissionCaseResultMapper submissionCaseResultMapper;
     private final CodeExecutionService codeExecutionService;
 
     @Override
@@ -70,7 +78,11 @@ public class SubmissionServiceImpl implements SubmissionService {
                     dto.getTimeLimitMs(),
                     dto.getMemoryLimitKb()
             );
-            caseResults.add(toRunCaseResult(i, runCase, executionResult));
+            CodeRunCaseResultVO caseResult = toRunCaseResult(i, runCase, executionResult);
+            caseResults.add(caseResult);
+            if (!STATUS_AC.equals(caseResult.getStatus())) {
+                break;
+            }
         }
         return new CodeRunResultVO("FINISHED", caseResults);
     }
@@ -79,6 +91,7 @@ public class SubmissionServiceImpl implements SubmissionService {
         if (!executionResult.isCompileSuccess()) {
             return new CodeRunCaseResultVO(
                     index,
+                    CASE_TYPE_CUSTOM,
                     STATUS_CE,
                     runCase.getInputText(),
                     runCase.getExpectedOutput(),
@@ -91,6 +104,7 @@ public class SubmissionServiceImpl implements SubmissionService {
         if (executionResult.isTimedOut()) {
             return new CodeRunCaseResultVO(
                     index,
+                    CASE_TYPE_CUSTOM,
                     STATUS_TLE,
                     runCase.getInputText(),
                     runCase.getExpectedOutput(),
@@ -103,6 +117,7 @@ public class SubmissionServiceImpl implements SubmissionService {
         if (!executionResult.isRuntimeSuccess()) {
             return new CodeRunCaseResultVO(
                     index,
+                    CASE_TYPE_CUSTOM,
                     STATUS_RE,
                     runCase.getInputText(),
                     runCase.getExpectedOutput(),
@@ -115,6 +130,7 @@ public class SubmissionServiceImpl implements SubmissionService {
         boolean passed = normalizeText(runCase.getExpectedOutput()).equals(normalizeText(executionResult.getStdout()));
         return new CodeRunCaseResultVO(
                 index,
+                CASE_TYPE_CUSTOM,
                 passed ? STATUS_AC : STATUS_WA,
                 runCase.getInputText(),
                 runCase.getExpectedOutput(),
@@ -168,19 +184,25 @@ public class SubmissionServiceImpl implements SubmissionService {
             userProblemProgressMapper.updateById(progress);
         }
 
-        List<ProblemTestCase> judgeCases = problemTestCaseMapper.selectList(
+        List<ProblemTestCase> judgeCases = new java.util.ArrayList<>(problemTestCaseMapper.selectList(
                 new LambdaQueryWrapper<ProblemTestCase>()
                         .eq(ProblemTestCase::getProblemId, problem.getId())
-                        .eq(ProblemTestCase::getCaseType, CASE_TYPE_HIDDEN)
+                        .in(ProblemTestCase::getCaseType, CASE_TYPE_SAMPLE, CASE_TYPE_HIDDEN)
                         .orderByAsc(ProblemTestCase::getSortOrder)
                         .orderByAsc(ProblemTestCase::getId)
-        );
+        ));
+        judgeCases.sort(Comparator
+                .comparingInt((ProblemTestCase item) -> CASE_TYPE_SAMPLE.equals(item.getCaseType()) ? 0 : 1)
+                .thenComparing(ProblemTestCase::getSortOrder)
+                .thenComparing(ProblemTestCase::getId));
 
         if (judgeCases.isEmpty()) {
             submission.setStatus(STATUS_SYSTEM_ERROR);
             submission.setJudgeMessage("当前题目尚未配置判题用例");
             submissionMapper.updateById(submission);
-            return new SubmissionCreateResultVO(submission.getId(), submission.getStatus(), submission.getJudgeMessage());
+            SubmissionCreateResultVO result = new SubmissionCreateResultVO(submission.getId(), submission.getStatus(), submission.getJudgeMessage());
+            result.setTotalCaseCount(0);
+            return result;
         }
 
         submission.setStatus(STATUS_RUNNING);
@@ -200,7 +222,15 @@ public class SubmissionServiceImpl implements SubmissionService {
     }
 
     private SubmissionCreateResultVO judgeSubmission(Problem problem, Submission submission, List<ProblemTestCase> judgeCases) {
-        for (ProblemTestCase judgeCase : judgeCases) {
+        List<CodeRunCaseResultVO> caseResults = new java.util.ArrayList<>();
+        int maxTimeMs = 0;
+        String finalStatus = STATUS_AC;
+        String finalMessage = "判题通过";
+        String compileMessage = null;
+        String judgeMessage = "判题通过";
+
+        for (int i = 0; i < judgeCases.size(); i++) {
+            ProblemTestCase judgeCase = judgeCases.get(i);
             CodeExecutionResult executionResult = codeExecutionService.execute(
                     submission.getLanguage(),
                     submission.getSourceCode(),
@@ -209,45 +239,185 @@ public class SubmissionServiceImpl implements SubmissionService {
                     problem.getMemoryLimitKb()
             );
 
-            if (!executionResult.isCompileSuccess()) {
-                submission.setStatus(STATUS_CE);
-                submission.setCompileMessage(executionResult.getStderr());
-                submission.setJudgeMessage("编译失败");
-                submissionMapper.updateById(submission);
-                return new SubmissionCreateResultVO(submission.getId(), submission.getStatus(), "编译失败");
-            }
+            CodeRunCaseResultVO caseResult = toSubmissionCaseResult(problem, i, judgeCase, executionResult);
+            caseResults.add(caseResult);
+            persistCaseResult(submission.getId(), caseResult);
 
-            if (executionResult.isTimedOut()) {
-                submission.setStatus(STATUS_TLE);
-                submission.setTimeMs(executionResult.getTimeMs() == null ? null : executionResult.getTimeMs().intValue());
-                submission.setJudgeMessage("运行超时");
-                submissionMapper.updateById(submission);
-                return new SubmissionCreateResultVO(submission.getId(), submission.getStatus(), "运行超时");
+            if (caseResult.getTimeMs() != null) {
+                maxTimeMs = Math.max(maxTimeMs, caseResult.getTimeMs().intValue());
             }
-
-            if (!executionResult.isRuntimeSuccess()) {
-                submission.setStatus(STATUS_RE);
-                submission.setTimeMs(executionResult.getTimeMs() == null ? null : executionResult.getTimeMs().intValue());
-                submission.setJudgeMessage(executionResult.getStderr());
-                submissionMapper.updateById(submission);
-                return new SubmissionCreateResultVO(submission.getId(), submission.getStatus(), "运行错误");
+            if (STATUS_AC.equals(finalStatus) && !STATUS_AC.equals(caseResult.getStatus())) {
+                finalStatus = caseResult.getStatus();
+                finalMessage = switch (caseResult.getStatus()) {
+                    case STATUS_CE -> "编译失败";
+                    case STATUS_TLE -> "运行超时";
+                    case STATUS_RE -> "运行错误";
+                    case STATUS_WA -> "答案错误";
+                    default -> "系统错误";
+                };
+                judgeMessage = caseResult.getMessage();
+                if (STATUS_CE.equals(caseResult.getStatus())) {
+                    compileMessage = caseResult.getErrorOutput();
+                }
+                break;
             }
-
-            if (!matchesExpectedOutput(problem.getProblemNo(), judgeCase.getExpectedOutput(), executionResult.getStdout())) {
-                submission.setStatus(STATUS_WA);
-                submission.setTimeMs(executionResult.getTimeMs() == null ? null : executionResult.getTimeMs().intValue());
-                submission.setJudgeMessage("输出与预期不一致");
-                submissionMapper.updateById(submission);
-                return new SubmissionCreateResultVO(submission.getId(), submission.getStatus(), "答案错误");
-            }
-
-            submission.setTimeMs(executionResult.getTimeMs() == null ? null : executionResult.getTimeMs().intValue());
         }
 
-        submission.setStatus(STATUS_AC);
-        submission.setJudgeMessage("判题通过");
+        submission.setStatus(finalStatus);
+        submission.setTimeMs(maxTimeMs);
+        submission.setCompileMessage(compileMessage);
+        submission.setJudgeMessage(judgeMessage);
         submissionMapper.updateById(submission);
-        return new SubmissionCreateResultVO(submission.getId(), submission.getStatus(), "判题通过");
+        Integer rank = STATUS_AC.equals(finalStatus) ? calculateAcRank(problem.getId(), maxTimeMs) : null;
+        SubmissionRankStatsVO rankStats = buildRankStats(problem.getId());
+        return new SubmissionCreateResultVO(
+                submission.getId(),
+                finalStatus,
+                finalMessage,
+                maxTimeMs,
+                rank,
+                judgeCases.size(),
+                rankStats,
+                caseResults
+        );
+    }
+
+    private CodeRunCaseResultVO toSubmissionCaseResult(
+            Problem problem,
+            int index,
+            ProblemTestCase judgeCase,
+            CodeExecutionResult executionResult) {
+        if (!executionResult.isCompileSuccess()) {
+            return new CodeRunCaseResultVO(
+                    index,
+                    judgeCase.getCaseType(),
+                    STATUS_CE,
+                    judgeCase.getInputText(),
+                    judgeCase.getExpectedOutput(),
+                    executionResult.getStdout(),
+                    executionResult.getStderr(),
+                    executionResult.getTimeMs(),
+                    "编译失败"
+            );
+        }
+        if (executionResult.isTimedOut()) {
+            return new CodeRunCaseResultVO(
+                    index,
+                    judgeCase.getCaseType(),
+                    STATUS_TLE,
+                    judgeCase.getInputText(),
+                    judgeCase.getExpectedOutput(),
+                    executionResult.getStdout(),
+                    executionResult.getStderr(),
+                    executionResult.getTimeMs(),
+                    "运行超时"
+            );
+        }
+        if (!executionResult.isRuntimeSuccess()) {
+            return new CodeRunCaseResultVO(
+                    index,
+                    judgeCase.getCaseType(),
+                    STATUS_RE,
+                    judgeCase.getInputText(),
+                    judgeCase.getExpectedOutput(),
+                    executionResult.getStdout(),
+                    executionResult.getStderr(),
+                    executionResult.getTimeMs(),
+                    "运行错误"
+            );
+        }
+        boolean passed = matchesExpectedOutput(problem.getProblemNo(), judgeCase.getExpectedOutput(), executionResult.getStdout());
+        return new CodeRunCaseResultVO(
+                index,
+                judgeCase.getCaseType(),
+                passed ? STATUS_AC : STATUS_WA,
+                judgeCase.getInputText(),
+                judgeCase.getExpectedOutput(),
+                executionResult.getStdout(),
+                executionResult.getStderr(),
+                executionResult.getTimeMs(),
+                passed ? "通过" : "输出与预期不一致"
+        );
+    }
+
+    private void persistCaseResult(Long submissionId, CodeRunCaseResultVO caseResult) {
+        submissionCaseResultMapper.insert(new SubmissionCaseResult()
+                .setSubmissionId(submissionId)
+                .setCaseType(caseResult.getCaseType())
+                .setCaseIndex(caseResult.getCaseIndex())
+                .setInputText(caseResult.getInputText())
+                .setExpectedOutput(caseResult.getExpectedOutput())
+                .setActualOutput(caseResult.getActualOutput())
+                .setErrorOutput(caseResult.getErrorOutput())
+                .setStatus(caseResult.getStatus())
+                .setTimeMs(caseResult.getTimeMs() == null ? null : caseResult.getTimeMs().intValue())
+                .setMessage(caseResult.getMessage()));
+    }
+
+    private Integer calculateAcRank(Long problemId, Integer timeMs) {
+        Long fasterCount = submissionMapper.selectCount(
+                new LambdaQueryWrapper<Submission>()
+                        .eq(Submission::getProblemId, problemId)
+                        .eq(Submission::getStatus, STATUS_AC)
+                        .lt(Submission::getTimeMs, timeMs)
+        );
+        return (fasterCount == null ? 0 : fasterCount.intValue()) + 1;
+    }
+
+    private SubmissionRankStatsVO buildRankStats(Long problemId) {
+        List<Submission> acceptedSubmissions = submissionMapper.selectList(
+                new LambdaQueryWrapper<Submission>()
+                        .eq(Submission::getProblemId, problemId)
+                        .eq(Submission::getStatus, STATUS_AC)
+        );
+        if (acceptedSubmissions == null) {
+            acceptedSubmissions = List.of();
+        }
+        return new SubmissionRankStatsVO(
+                acceptedSubmissions.size(),
+                buildTimeBuckets(acceptedSubmissions)
+        );
+    }
+
+    private List<DistributionBucketVO> buildTimeBuckets(List<Submission> submissions) {
+        List<Integer> times = submissions.stream()
+                .map(Submission::getTimeMs)
+                .filter(java.util.Objects::nonNull)
+                .sorted()
+                .toList();
+        if (times.isEmpty()) {
+            return List.of();
+        }
+        int min = times.get(0);
+        int max = times.get(times.size() - 1);
+        if (min == max) {
+            return List.of(new DistributionBucketVO(min + " ms", min, max, times.size()));
+        }
+
+        int bucketCount = Math.min(6, max - min + 1);
+        int bucketSize = (int) Math.ceil((max - min + 1) / (double) bucketCount);
+        List<DistributionBucketVO> buckets = new java.util.ArrayList<>();
+        for (int i = 0; i < bucketCount; i++) {
+            int bucketMin = min + i * bucketSize;
+            int bucketMax = bucketMin + bucketSize - 1;
+            buckets.add(new DistributionBucketVO(bucketMin + "-" + bucketMax + " ms", bucketMin, bucketMax, 0));
+        }
+        times.forEach(time -> addToBucket(buckets, time));
+        return buckets;
+    }
+
+    private void addToBucket(List<DistributionBucketVO> buckets, Integer value) {
+        if (value == null) {
+            return;
+        }
+        for (DistributionBucketVO bucket : buckets) {
+            boolean gteMin = bucket.getMin() == null || value >= bucket.getMin();
+            boolean lteMax = bucket.getMax() == null || value <= bucket.getMax();
+            if (gteMin && lteMax) {
+                bucket.setCount(bucket.getCount() + 1);
+                return;
+            }
+        }
     }
 
     private boolean matchesExpectedOutput(Integer problemNo, String expectedOutput, String actualOutput) {

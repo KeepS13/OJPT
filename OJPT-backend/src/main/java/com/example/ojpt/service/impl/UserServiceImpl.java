@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.example.ojpt.dto.EmailUpdateDTO;
 import com.example.ojpt.dto.PasswordUpdateDTO;
 import com.example.ojpt.dto.PhoneUpdateDTO;
+import com.example.ojpt.dto.RegisterRequestDTO;
 import com.example.ojpt.dto.UserUpdateDTO;
 import com.example.ojpt.dto.UsernameUpdateDTO;
 import com.example.ojpt.entity.Role;
@@ -36,11 +37,16 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
+
+    private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
+    private static final Pattern PHONE_PATTERN = Pattern.compile("^1[3-9]\\d{9}$");
+    private static final int MAX_USERNAME_ATTEMPTS = 20;
 
     private final UserMapper userMapper;
     private final UserRoleMapper userRoleMapper;
@@ -83,6 +89,101 @@ public class UserServiceImpl implements UserService {
         return userMapper.selectOne(new LambdaQueryWrapper<User>()
                 .eq(User::getPhone, phone)
                 .last("LIMIT 1"));
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public User register(RegisterRequestDTO dto) {
+        String account = dto.getAccount().trim();
+        String password = dto.getPassword();
+        String nickname = dto.getNickname().trim();
+
+        if (nickname.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "昵称不能为空");
+        }
+        if (dto.getGender() == null || (dto.getGender() != 1 && dto.getGender() != 2)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "性别只能选择男或女");
+        }
+        boolean emailAccount = account.contains("@");
+        String email = null;
+        String phone = null;
+        if (emailAccount) {
+            email = account.toLowerCase();
+            if (!EMAIL_PATTERN.matcher(email).matches()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "邮箱格式不正确");
+            }
+            if (findByEmail(email) != null) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "邮箱已被使用");
+            }
+        } else {
+            phone = account;
+            if (!PHONE_PATTERN.matcher(phone).matches()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "手机号格式不正确");
+            }
+            if (findByPhone(phone) != null) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "手机号已被使用");
+            }
+        }
+
+        String username = buildUniqueUsername(nickname, account);
+        User user = new User()
+                .setUsername(username)
+                .setPassword(passwordEncoder.encode(password))
+                .setEmail(email)
+                .setPhone(phone)
+                .setStatus(1)
+                .setRoleType("USER")
+                .setIsDeleted(0);
+        userMapper.insert(user);
+
+        UserProfile profile = new UserProfile()
+                .setUserId(user.getId())
+                .setGender(dto.getGender())
+                .setBirthday(dto.getBirthday());
+        userProfileMapper.insert(profile);
+
+        Role userRole = roleMapper.selectOne(new LambdaQueryWrapper<Role>()
+                .eq(Role::getCode, "USER")
+                .last("LIMIT 1"));
+        if (userRole == null) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "默认用户角色不存在");
+        }
+
+        userRoleMapper.insert(new UserRole()
+                .setUserId(user.getId())
+                .setRoleId(userRole.getId())
+                .setBindSource("REGISTER"));
+
+        return user;
+    }
+
+    private String buildUniqueUsername(String nickname, String account) {
+        String base = nickname.trim();
+        if (base.length() > 30) {
+            base = base.substring(0, 30);
+        }
+        if (findByUsername(base) == null) {
+            return base;
+        }
+
+        String suffixSource = account.contains("@") ? account.substring(0, account.indexOf('@')) : account;
+        String suffix = suffixSource.replaceAll("[^A-Za-z0-9]", "");
+        if (suffix.length() > 6) {
+            suffix = suffix.substring(suffix.length() - 6);
+        }
+        if (suffix.isBlank()) {
+            suffix = String.valueOf(System.currentTimeMillis() % 1000000);
+        }
+
+        for (int i = 1; i <= MAX_USERNAME_ATTEMPTS; i++) {
+            String candidateSuffix = "_" + suffix + (i == 1 ? "" : i);
+            int maxBaseLength = Math.max(1, 30 - candidateSuffix.length());
+            String candidate = base.substring(0, Math.min(base.length(), maxBaseLength)) + candidateSuffix;
+            if (findByUsername(candidate) == null) {
+                return candidate;
+            }
+        }
+        throw new ResponseStatusException(HttpStatus.CONFLICT, "昵称已被使用，请换一个昵称");
     }
 
     @Override

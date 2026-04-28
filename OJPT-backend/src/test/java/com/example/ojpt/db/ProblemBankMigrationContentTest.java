@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ProblemBankMigrationContentTest {
 
     private static final Path MIGRATION =
-            Path.of("src/main/resources/db/migration/V1_5__seed_sample_problem_set.sql");
+            Path.of("src/main/resources/db/migration/V1_0__baseline_schema_and_seed.sql");
 
     @Test
     void sampleProblemMigration_shouldContainThirtySequentialProblems() throws IOException {
@@ -30,9 +30,9 @@ class ProblemBankMigrationContentTest {
             problemNos.add(Integer.parseInt(matcher.group(2)));
         }
 
-        assertEquals(30, problemNos.size(), "示例题数量应为 30");
+        assertEquals(30, problemNos.size(), "sample problem count should be 30");
         for (int i = 1; i <= 30; i++) {
-            assertEquals(i, problemNos.get(i - 1), "题号必须从 1 连续到 30");
+            assertEquals(i, problemNos.get(i - 1), "problem numbers should be continuous from 1 to 30");
         }
     }
 
@@ -46,15 +46,15 @@ class ProblemBankMigrationContentTest {
                 Pattern.DOTALL
         ).matcher(problemInsertBlock);
 
-        assertTrue(matcher.find(), "必须包含题号 2 的题面数据");
+        assertTrue(matcher.find(), "problem 2 statement data should exist");
 
         String statement = matcher.group(1);
         assertNotNull(statement);
-        assertTrue(statement.length() >= 300, "题目 2 的题面不能过于简陋");
-        assertTrue(statement.contains("输入格式"), "题目 2 需要包含输入格式");
-        assertTrue(statement.contains("输出格式"), "题目 2 需要包含输出格式");
-        assertTrue(statement.contains("样例"), "题目 2 需要包含样例");
-        assertTrue(statement.contains("数据范围"), "题目 2 需要包含数据范围");
+        assertTrue(statement.length() >= 300, "problem 2 statement should be detailed enough");
+        assertTrue(statement.contains("输入格式"), "problem 2 should include input format");
+        assertTrue(statement.contains("输出格式"), "problem 2 should include output format");
+        assertTrue(statement.contains("样例"), "problem 2 should include examples");
+        assertTrue(statement.contains("数据范围"), "problem 2 should include constraints");
     }
 
     private String extractProblemInsertBlock(String sql) {
@@ -63,7 +63,19 @@ class ProblemBankMigrationContentTest {
                 Pattern.DOTALL
         ).matcher(sql);
 
-        assertTrue(matcher.find(), "必须包含 problem 表的批量插入语句");
-        return matcher.group(2);
+        while (matcher.find()) {
+            String problemInsertBlock = matcher.group(2);
+            Matcher problemNoMatcher = Pattern.compile("\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*,\\s*'")
+                    .matcher(problemInsertBlock);
+            int problemCount = 0;
+            while (problemNoMatcher.find()) {
+                problemCount++;
+            }
+            if (problemCount == 30) {
+                return problemInsertBlock;
+            }
+        }
+
+        throw new AssertionError("a problem insert block with 30 sample problems should exist");
     }
 }

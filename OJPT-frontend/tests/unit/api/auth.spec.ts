@@ -1,12 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// 使用 hoisted 工厂避免 vi.mock 提前提升导致的未初始化引用问题
 const { postMock, getMock } = vi.hoisted(() => ({
   postMock: vi.fn(),
   getMock: vi.fn(),
 }))
 
-// 使用别名路径 mock 掉真实的 axios 实例，避免触发 request.ts 中复杂的拦截器与 Pinia 依赖
 vi.mock('@/api/request', () => ({
   default: {
     post: postMock,
@@ -14,7 +12,7 @@ vi.mock('@/api/request', () => ({
   },
 }))
 
-import { login, refreshToken, logout, getCurrentUser } from '../../../src/api/auth'
+import { login, register, refreshToken, logout, getCurrentUser } from '../../../src/api/auth'
 
 describe('auth api', () => {
   beforeEach(() => {
@@ -22,7 +20,7 @@ describe('auth api', () => {
     getMock.mockReset()
   })
 
-  it('login 应该向 /auth/login 发送账号与密码', async () => {
+  it('login posts account and password to /auth/login', async () => {
     const payload = { account: 'user@example.com', password: '123456' }
     postMock.mockResolvedValue({ data: {} })
 
@@ -32,7 +30,22 @@ describe('auth api', () => {
     expect(postMock).toHaveBeenCalledWith('/auth/login', payload)
   })
 
-  it('refreshToken 应该向 /auth/refresh 发送 refreshToken', async () => {
+  it('register posts registration payload to /auth/register', async () => {
+    const payload = {
+      account: 'new-user@example.com',
+      password: '123456',
+      nickname: '小明',
+      gender: 1,
+    }
+    postMock.mockResolvedValue({ data: {} })
+
+    await register(payload)
+
+    expect(postMock).toHaveBeenCalledTimes(1)
+    expect(postMock).toHaveBeenCalledWith('/auth/register', payload)
+  })
+
+  it('refreshToken posts refreshToken to /auth/refresh', async () => {
     const payload = { refreshToken: 'refresh-token-xxx' }
     postMock.mockResolvedValue({ data: {} })
 
@@ -42,7 +55,7 @@ describe('auth api', () => {
     expect(postMock).toHaveBeenCalledWith('/auth/refresh', payload)
   })
 
-  it('logout 应该向 /auth/logout 发送 POST 请求且不带请求体', async () => {
+  it('logout posts to /auth/logout without body', async () => {
     postMock.mockResolvedValue({ data: {} })
 
     await logout()
@@ -51,7 +64,7 @@ describe('auth api', () => {
     expect(postMock).toHaveBeenCalledWith('/auth/logout')
   })
 
-  it('getCurrentUser 应该向 /auth/me 发起 GET 请求', async () => {
+  it('getCurrentUser gets /auth/me', async () => {
     getMock.mockResolvedValue({ data: {} })
 
     await getCurrentUser()
@@ -60,4 +73,3 @@ describe('auth api', () => {
     expect(getMock).toHaveBeenCalledWith('/auth/me')
   })
 })
-

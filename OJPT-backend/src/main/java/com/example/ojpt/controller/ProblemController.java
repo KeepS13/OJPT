@@ -3,13 +3,18 @@ package com.example.ojpt.controller;
 import com.example.ojpt.common.PageResult;
 import com.example.ojpt.common.Result;
 import com.example.ojpt.dto.CodeRunDTO;
+import com.example.ojpt.dto.ProblemCreateDTO;
+import com.example.ojpt.dto.ProblemCodeDraftSaveDTO;
 import com.example.ojpt.dto.SubmissionCreateDTO;
 import com.example.ojpt.security.LoginUserDetails;
+import com.example.ojpt.service.ProblemCodeDraftService;
 import com.example.ojpt.service.ProblemService;
 import com.example.ojpt.service.ProblemTestCaseService;
 import com.example.ojpt.service.SubmissionService;
+import com.example.ojpt.vo.ProblemCodeDraftVO;
 import com.example.ojpt.vo.ProblemDetailVO;
 import com.example.ojpt.vo.ProblemListItemVO;
+import com.example.ojpt.vo.ProblemSimpleVO;
 import com.example.ojpt.vo.ProblemTestCaseVO;
 import com.example.ojpt.vo.CodeRunResultVO;
 import com.example.ojpt.vo.SubmissionCreateResultVO;
@@ -22,6 +27,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -38,6 +44,7 @@ public class ProblemController {
     private final ProblemService problemService;
     private final ProblemTestCaseService problemTestCaseService;
     private final SubmissionService submissionService;
+    private final ProblemCodeDraftService problemCodeDraftService;
 
     @GetMapping
     @Operation(summary = "题库列表")
@@ -60,6 +67,16 @@ public class ProblemController {
         return Result.ok(problemService.getProblemDetail(problemId, getCurrentUserId()));
     }
 
+    @PostMapping
+    @Operation(summary = "创建题目草稿")
+    public Result<ProblemSimpleVO> createProblemDraft(@Valid @RequestBody ProblemCreateDTO dto) {
+        Long userId = getCurrentUserId();
+        if (userId == null) {
+            throw com.example.ojpt.exception.BusinessException.unauthorized("未登录");
+        }
+        return Result.ok(problemService.createDraft(userId, dto));
+    }
+
     @GetMapping("/no/{problemNo}")
     @Operation(summary = "按题号获取题目详情")
     public Result<ProblemDetailVO> getProblemDetailByNo(@PathVariable("problemNo") Integer problemNo) {
@@ -70,6 +87,30 @@ public class ProblemController {
     @Operation(summary = "按题号获取公开样例测试用例")
     public Result<List<ProblemTestCaseVO>> getProblemSampleTestCases(@PathVariable("problemNo") Integer problemNo) {
         return Result.ok(problemTestCaseService.getSampleTestCasesByProblemNo(problemNo));
+    }
+
+    @GetMapping("/no/{problemNo}/draft")
+    @Operation(summary = "获取当前用户题目代码草稿")
+    public Result<ProblemCodeDraftVO> getCodeDraft(
+            @PathVariable("problemNo") Integer problemNo,
+            @RequestParam("language") String language) {
+        Long userId = getCurrentUserId();
+        if (userId == null) {
+            throw com.example.ojpt.exception.BusinessException.unauthorized("未登录");
+        }
+        return Result.ok(problemCodeDraftService.getDraft(userId, problemNo, language));
+    }
+
+    @PutMapping("/no/{problemNo}/draft")
+    @Operation(summary = "保存当前用户题目代码草稿")
+    public Result<ProblemCodeDraftVO> saveCodeDraft(
+            @PathVariable("problemNo") Integer problemNo,
+            @Valid @RequestBody ProblemCodeDraftSaveDTO dto) {
+        Long userId = getCurrentUserId();
+        if (userId == null) {
+            throw com.example.ojpt.exception.BusinessException.unauthorized("未登录");
+        }
+        return Result.ok(problemCodeDraftService.saveDraft(userId, problemNo, dto));
     }
 
     @PostMapping("/no/{problemNo}/submissions")

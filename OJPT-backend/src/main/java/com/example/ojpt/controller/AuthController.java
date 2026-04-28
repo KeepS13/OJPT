@@ -4,6 +4,7 @@ import com.example.ojpt.common.Result;
 import com.example.ojpt.config.JwtProperties;
 import com.example.ojpt.converter.AuthConverter;
 import com.example.ojpt.dto.LoginRequestDTO;
+import com.example.ojpt.dto.RegisterRequestDTO;
 import com.example.ojpt.entity.User;
 import com.example.ojpt.exception.BusinessException;
 import com.example.ojpt.exception.ErrorCode;
@@ -131,6 +132,26 @@ public class AuthController {
         );
 
         // 10. 返回响应
+        return Result.ok(vo);
+    }
+
+    @PostMapping("/register")
+    @Operation(summary = "用户注册", description = "支持邮箱或手机号注册，注册成功后直接返回登录态")
+    public Result<LoginResponseVO> register(@Valid @RequestBody RegisterRequestDTO dto) {
+        User user = userService.register(dto);
+        List<String> roles = List.of("USER");
+        JwtService.TokenPair pair = jwtService.generateTokens(user.getId(), user.getUsername(), roles);
+        refreshTokenStore.store(user.getId(), pair.refreshJti(), pair.refreshToken());
+
+        LoginResponseVO vo = authConverter.toLoginResponse(
+                "Bearer",
+                pair,
+                jwtProperties.getAccessExpSeconds(),
+                jwtProperties.getRefreshExpSeconds(),
+                user,
+                roles
+        );
+
         return Result.ok(vo);
     }
 

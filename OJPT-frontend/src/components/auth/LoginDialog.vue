@@ -3,13 +3,22 @@ import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Form as VForm, Field, ErrorMessage } from 'vee-validate'
 import * as yup from 'yup'
-import { login } from '@/api/auth'
+import { login, register } from '@/api/auth'
 import { useAuth } from '@/hooks/useAuth'
 
 interface LoginForm {
   account: string
   password: string
 }
+
+interface RegisterForm extends LoginForm {
+  nickname: string
+  gender: 1 | 2 | ''
+}
+
+type AuthForm = LoginForm | RegisterForm
+type LoginTab = 'email' | 'phone'
+type AuthMode = 'login' | 'register'
 
 defineProps<{
   modelValue: boolean
@@ -21,50 +30,78 @@ const emit = defineEmits<{
 
 const auth = useAuth()
 const loading = ref(false)
+const authMode = ref<AuthMode>('login')
+const activeTab = ref<LoginTab>('email')
 const autoLoggingIn = computed(() => auth.authInitializing && !auth.isAuthed)
 
-// 密码输入框的引用
 const passwordInputRef = ref<InstanceType<typeof import('element-plus').ElInput> | null>(null)
 
-// 登录方式：email 或 phone
-type LoginTab = 'email' | 'phone'
-const activeTab = ref<LoginTab>('email')
-
-// 邮箱自动补全
 const emailDomains = ['qq.com', '163.com', '126.com', 'gmail.com', 'outlook.com', 'hotmail.com', 'icloud.com']
 const accountInput = ref('')
 const showEmailSuggest = ref(false)
 const emailSuggestList = ref<string[]>([])
 const emailFocused = ref(false)
-const selectedIndex = ref(-1) // 当前选中的下拉选项索引，-1 表示未选中
-const isNavigatingSuggest = ref(false) // 是否正在导航下拉框
+const selectedIndex = ref(-1)
+const isNavigatingSuggest = ref(false)
 
-const loginSchema = computed(() =>
+const isRegister = computed(() => authMode.value === 'register')
+const formKey = computed(() => `${authMode.value}-${activeTab.value}`)
+
+const initialValues = computed<RegisterForm>(() => ({
+  account: '',
+  password: '',
+  nickname: '',
+  gender: '',
+}))
+
+const baseAccountSchema = computed(() =>
   activeTab.value === 'email'
-    ? yup.object({
-        account: yup
-          .string()
-          .required('请输入邮箱')
-          .email('请输入正确的邮箱地址'),
-        password: yup.string().required('请输入密码'),
-      })
-    : yup.object({
-        account: yup
-          .string()
-          .required('请输入手机号')
-          .matches(/^1[3-9]\d{9}$/, '请输入正确的手机号'),
-        password: yup.string().required('请输入密码'),
-      })
+    ? yup
+        .string()
+        .required('请输入邮箱')
+        .email('请输入正确的邮箱地址')
+    : yup
+        .string()
+        .required('请输入手机号')
+        .matches(/^1[3-9]\d{9}$/, '请输入正确的手机号')
 )
+
+const validationSchema = computed(() => {
+  const shape = {
+    account: baseAccountSchema.value,
+    password: isRegister.value
+      ? yup.string().required('请输入密码').min(6, '密码至少 6 位').max(64, '密码不能超过 64 位')
+      : yup.string().required('请输入密码'),
+  }
+
+  if (!isRegister.value) {
+    return yup.object(shape)
+  }
+
+  return yup.object({
+    ...shape,
+    nickname: yup.string().trim().required('请输入昵称').max(30, '昵称不能超过 30 个字符'),
+    gender: yup
+      .number()
+      .transform((value, originalValue) => (originalValue === '' ? undefined : value))
+      .oneOf([1, 2], '请选择性别')
+      .required('请选择性别'),
+  })
+})
 
 const accountPlaceholder = computed(() =>
   activeTab.value === 'email' ? '请输入邮箱' : '请输入手机号'
 )
 
-const initialValues: LoginForm = {
-  account: '',
-  password: '',
-}
+const tabLabels = computed(() => ({
+  email: authMode.value === 'login' ? '邮箱登录' : '邮箱注册',
+  phone: authMode.value === 'login' ? '手机号登录' : '手机号注册',
+}))
+
+const submitText = computed(() => {
+  if (autoLoggingIn.value) return '正在自动登录...'
+  return authMode.value === 'login' ? '登录' : '注册并登录'
+})
 
 const formatRemaining = (secs: number) => {
   const s = Math.max(0, Math.floor(secs))
@@ -76,63 +113,66 @@ const formatRemaining = (secs: number) => {
   return `${days}天 ${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
 }
 
-const onSubmit = async (values: LoginForm, setFieldValue?: (field: string, value: unknown) => void) => {
+const getErrorMessage = (error: unknown) => {
+  const resp = (error as {
+    response?: { data?: { message?: string; data?: { remainingSeconds?: number } }; status?: number }
+    message?: string
+  })?.response
+
+  const remainingSeconds = resp?.data?.data?.remainingSeconds
+  if (resp?.status === 403 && remainingSeconds !== undefined) {
+    return `账号已被封禁，剩余：${formatRemaining(remainingSeconds)}`
+  }
+
+  const serverMsg = resp?.data?.message
+  if (resp?.status === 401) {
+    return serverMsg && /bad credentials/i.test(serverMsg)
+      ? '用户名或密码错误'
+      : serverMsg || '用户名或密码错误'
+  }
+
+  if (serverMsg) return serverMsg
+  if (resp?.status === undefined) return '请求失败：网络异常，请检查连接后重试'
+  return (error as { message?: string })?.message || '请求失败：请稍后重试'
+}
+
+const onSubmit = async (values: AuthForm, setFieldValue?: (field: string, value: unknown) => void) => {
   if (loading.value) return
   loading.value = true
   try {
-    const { data } = await login(values)
-    auth.loginSuccess(data)
-    ElMessage.success('登录成功')
-    // 清除密码字段
-    if (setFieldValue) {
-      setFieldValue('password', '')
-    }
+    const { account, password } = values
+    const response = isRegister.value
+      ? await register({
+          account,
+          password,
+          nickname: (values as RegisterForm).nickname.trim(),
+          gender: (values as RegisterForm).gender as 1 | 2,
+        })
+      : await login({ account, password })
+
+    auth.loginSuccess(response.data)
+    ElMessage.success(isRegister.value ? '注册成功' : '登录成功')
+    setFieldValue?.('password', '')
     emit('update:modelValue', false)
   } catch (error: unknown) {
-    const resp = (error as {
-      response?: { data?: { message?: string; data?: { remainingSeconds?: number } }; status?: number }
-      message?: string
-    })?.response
-
-    const remainingSeconds = resp?.data?.data?.remainingSeconds
-    const banMsg =
-      resp?.status === 403 && remainingSeconds !== undefined
-        ? `账号已被封禁，剩余：${formatRemaining(remainingSeconds)}`
-        : null
-
-    const serverMsg = resp?.data?.message
-
-    // 统一登录错误提示：把常见英文/无 message 场景映射为更友好的中文
-    const normalized401Msg =
-      resp?.status === 401
-        ? serverMsg && /bad credentials/i.test(serverMsg)
-          ? '用户名或密码错误'
-          : serverMsg || '用户名或密码错误'
-        : null
-
-    const msg =
-      banMsg ??
-      normalized401Msg ??
-      serverMsg ??
-      (resp?.status === undefined
-        ? '登录失败：网络异常，请检查连接后重试'
-        : (error as { message?: string })?.message) ??
-      '登录失败：请稍后重试'
-    ElMessage.error(msg)
+    ElMessage.error(getErrorMessage(error))
   } finally {
     loading.value = false
   }
 }
 
+const resetSuggest = () => {
+  showEmailSuggest.value = false
+  emailSuggestList.value = []
+  selectedIndex.value = -1
+  isNavigatingSuggest.value = false
+}
+
 const updateEmailSuggestions = (value: string, field: { onChange: (val: string) => void }) => {
-  // 手机号登录模式下，不提供邮箱补全
   if (activeTab.value === 'phone') {
     field.onChange(value)
     accountInput.value = value
-    showEmailSuggest.value = false
-    emailSuggestList.value = []
-    selectedIndex.value = -1
-    isNavigatingSuggest.value = false
+    resetSuggest()
     return
   }
 
@@ -140,19 +180,13 @@ const updateEmailSuggestions = (value: string, field: { onChange: (val: string) 
   accountInput.value = value
 
   if (!emailFocused.value) {
-    showEmailSuggest.value = false
-    emailSuggestList.value = []
-    selectedIndex.value = -1
-    isNavigatingSuggest.value = false
+    resetSuggest()
     return
   }
 
   const [localPart, domainPart = ''] = value.split('@')
   if (!localPart || /\s/.test(value)) {
-    showEmailSuggest.value = false
-    emailSuggestList.value = []
-    selectedIndex.value = -1
-    isNavigatingSuggest.value = false
+    resetSuggest()
     return
   }
 
@@ -163,7 +197,6 @@ const updateEmailSuggestions = (value: string, field: { onChange: (val: string) 
 
   emailSuggestList.value = list
   showEmailSuggest.value = list.length > 0
-  // 重置选中索引
   if (!isNavigatingSuggest.value) {
     selectedIndex.value = -1
   }
@@ -172,35 +205,26 @@ const updateEmailSuggestions = (value: string, field: { onChange: (val: string) 
 const applyEmailSuggestion = (suggest: string, field: { onChange: (value: string) => void }) => {
   field.onChange(suggest)
   accountInput.value = suggest
-  showEmailSuggest.value = false
-  selectedIndex.value = -1
-  isNavigatingSuggest.value = false
+  resetSuggest()
   emailFocused.value = false
-  // 自动聚焦到密码输入框
   setTimeout(() => {
     passwordInputRef.value?.focus()
   }, 100)
 }
 
 const onAccountFocus = (field: { value?: string; onChange: (val: string) => void }) => {
-  // 重新获得焦点时，重新启用建议功能
   emailFocused.value = true
   const current = field.value || accountInput.value
   if (activeTab.value === 'email' && current) {
-    // 如果有输入内容，立即显示建议
     updateEmailSuggestions(current, field)
   }
 }
 
 const onAccountBlur = () => {
-  // 延迟隐藏，给点击建议项留时间
   setTimeout(() => {
-    // 如果不在导航建议状态，说明用户点击了别处，立即隐藏
     if (!isNavigatingSuggest.value) {
       emailFocused.value = false
-      showEmailSuggest.value = false
-      emailSuggestList.value = []
-      selectedIndex.value = -1
+      resetSuggest()
     }
   }, 150)
 }
@@ -211,84 +235,8 @@ const onAccountClear = (
 ) => {
   field.onChange('')
   accountInput.value = ''
-  showEmailSuggest.value = false
-  emailSuggestList.value = []
-  selectedIndex.value = -1
-  isNavigatingSuggest.value = false
-  // 同时清空密码字段
-  if (setFieldValue) {
-    setFieldValue('password', '')
-  }
-}
-
-const onAccountKeydown = (
-  event: KeyboardEvent,
-  field: { value?: string; onChange: (val: string) => void }
-) => {
-  // 只在邮箱登录模式下且有下拉框时处理
-  if (activeTab.value !== 'email' || !showEmailSuggest.value || emailSuggestList.value.length === 0) {
-    // 无下拉框时，Tab 键正常行为（跳转到下一个输入框）
-    if (event.key === 'Tab' && !event.shiftKey) {
-      return // 允许默认行为
-    }
-    return
-  }
-
-  const key = event.key
-
-  // Tab 键：进入下拉框（选中第一个选项）
-  if (key === 'Tab' && !event.shiftKey) {
-    event.preventDefault()
-    if (selectedIndex.value === -1) {
-      // 从输入框进入下拉框，选中第一个
-      selectedIndex.value = 0
-      isNavigatingSuggest.value = true
-    } else {
-      // 在下拉框内，Tab 等同于方向键下
-      moveDown()
-    }
-    return
-  }
-
-  // 方向键下：选择下一个选项
-  if (key === 'ArrowDown') {
-    event.preventDefault()
-    if (selectedIndex.value === -1) {
-      selectedIndex.value = 0
-    } else {
-      moveDown()
-    }
-    isNavigatingSuggest.value = true
-    return
-  }
-
-  // 方向键上：选择上一个选项
-  if (key === 'ArrowUp') {
-    event.preventDefault()
-    moveUp()
-    isNavigatingSuggest.value = true
-    return
-  }
-
-  // Enter 键：应用选中的建议
-  if (key === 'Enter' && selectedIndex.value >= 0 && selectedIndex.value < emailSuggestList.value.length) {
-    event.preventDefault()
-    const selected = emailSuggestList.value[selectedIndex.value]
-    if (selected) {
-      applyEmailSuggestion(selected, field)
-      // applyEmailSuggestion 内部已经处理了聚焦，这里不需要重复
-    }
-    return
-  }
-
-  // Escape 键：关闭下拉框
-  if (key === 'Escape') {
-    event.preventDefault()
-    showEmailSuggest.value = false
-    selectedIndex.value = -1
-    isNavigatingSuggest.value = false
-    return
-  }
+  resetSuggest()
+  setFieldValue?.('password', '')
 }
 
 const moveDown = () => {
@@ -307,13 +255,64 @@ const moveUp = () => {
   }
 }
 
+const onAccountKeydown = (
+  event: KeyboardEvent,
+  field: { value?: string; onChange: (val: string) => void }
+) => {
+  if (activeTab.value !== 'email' || !showEmailSuggest.value || emailSuggestList.value.length === 0) {
+    return
+  }
+
+  if (event.key === 'Tab' && !event.shiftKey) {
+    event.preventDefault()
+    if (selectedIndex.value === -1) {
+      selectedIndex.value = 0
+      isNavigatingSuggest.value = true
+    } else {
+      moveDown()
+    }
+    return
+  }
+
+  if (event.key === 'ArrowDown') {
+    event.preventDefault()
+    selectedIndex.value === -1 ? (selectedIndex.value = 0) : moveDown()
+    isNavigatingSuggest.value = true
+    return
+  }
+
+  if (event.key === 'ArrowUp') {
+    event.preventDefault()
+    moveUp()
+    isNavigatingSuggest.value = true
+    return
+  }
+
+  if (event.key === 'Enter' && selectedIndex.value >= 0 && selectedIndex.value < emailSuggestList.value.length) {
+    event.preventDefault()
+    const selected = emailSuggestList.value[selectedIndex.value]
+    if (selected) applyEmailSuggestion(selected, field)
+    return
+  }
+
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    resetSuggest()
+  }
+}
+
 const switchTab = (tab: LoginTab) => {
   if (activeTab.value === tab) return
   activeTab.value = tab
-  showEmailSuggest.value = false
-  emailSuggestList.value = []
-  selectedIndex.value = -1
-  isNavigatingSuggest.value = false
+  accountInput.value = ''
+  resetSuggest()
+}
+
+const switchMode = (mode: AuthMode) => {
+  if (authMode.value === mode) return
+  authMode.value = mode
+  accountInput.value = ''
+  resetSuggest()
 }
 
 const close = () => {
@@ -322,7 +321,6 @@ const close = () => {
   }
 }
 
-// 自动登录完成且已是登录状态时，自动关闭弹窗
 watch(
   () => auth.isAuthed,
   (val) => {
@@ -357,7 +355,7 @@ watch(
           type="button"
           @click="switchTab('email')"
         >
-          邮箱登录
+          {{ tabLabels.email }}
         </button>
         <button
           class="tab"
@@ -365,19 +363,20 @@ watch(
           type="button"
           @click="switchTab('phone')"
         >
-          手机号登录
+          {{ tabLabels.phone }}
         </button>
       </div>
 
       <VForm
+        :key="formKey"
         :initial-values="initialValues"
-        :validation-schema="loginSchema"
+        :validation-schema="validationSchema"
         v-slot="{ handleSubmit: submitForm, setFieldValue }"
       >
         <el-form
           label-position="top"
           class="login-form"
-          @submit.prevent="submitForm((values) => onSubmit(values as LoginForm, setFieldValue))"
+          @submit.prevent="submitForm((values) => onSubmit(values as AuthForm, setFieldValue))"
         >
           <el-form-item>
             <Field name="account" v-slot="{ field }">
@@ -429,9 +428,9 @@ watch(
                 @update:model-value="field.onChange"
                 type="password"
                 show-password
-                placeholder="请输入密码"
-                autocomplete="current-password"
-                @keyup.enter="submitForm((values) => onSubmit(values as LoginForm, setFieldValue))"
+                :placeholder="isRegister ? '请输入密码（至少 6 位）' : '请输入密码'"
+                :autocomplete="isRegister ? 'new-password' : 'current-password'"
+                @keyup.enter="submitForm((values) => onSubmit(values as AuthForm, setFieldValue))"
               />
             </Field>
           </el-form-item>
@@ -439,24 +438,74 @@ watch(
             <div class="field-error">{{ message }}</div>
           </ErrorMessage>
 
+          <template v-if="isRegister">
+            <el-form-item>
+              <Field name="nickname" v-slot="{ field }">
+                <el-input
+                  :model-value="field.value"
+                  data-testid="register-nickname-input"
+                  @update:model-value="field.onChange"
+                  placeholder="请输入昵称"
+                  maxlength="30"
+                  clearable
+                />
+              </Field>
+            </el-form-item>
+            <ErrorMessage name="nickname" v-slot="{ message }">
+              <div class="field-error">{{ message }}</div>
+            </ErrorMessage>
+
+            <div class="register-row">
+              <Field name="gender" v-slot="{ field }">
+                <el-radio-group
+                  :model-value="field.value"
+                  data-testid="register-gender-radio"
+                  class="gender-group"
+                  @update:model-value="field.onChange"
+                >
+                  <el-radio-button :value="1">男</el-radio-button>
+                  <el-radio-button :value="2">女</el-radio-button>
+                </el-radio-group>
+              </Field>
+              <ErrorMessage name="gender" v-slot="{ message }">
+                <div class="field-error">{{ message }}</div>
+              </ErrorMessage>
+            </div>
+          </template>
+
           <el-form-item>
             <el-button
               type="primary"
               data-testid="login-submit-button"
-              @click="submitForm((values) => onSubmit(values as LoginForm, setFieldValue))"
+              @click="submitForm((values) => onSubmit(values as AuthForm, setFieldValue))"
               :loading="loading || autoLoggingIn"
               :disabled="autoLoggingIn"
               class="submit-btn"
               block
             >
-              {{ autoLoggingIn ? '正在自动登录…' : '登录' }}
+              {{ submitText }}
             </el-button>
           </el-form-item>
 
-        <div class="action-links">
-          <a href="javascript:void(0)">注册</a>
-          <a href="javascript:void(0)">忘记密码</a>
-        </div>
+          <div class="action-links" :class="{ 'action-links--single': isRegister }">
+            <a
+              v-if="!isRegister"
+              href="javascript:void(0)"
+              data-testid="switch-register-link"
+              @click="switchMode('register')"
+            >
+              注册
+            </a>
+            <a
+              v-else
+              href="javascript:void(0)"
+              data-testid="switch-login-link"
+              @click="switchMode('login')"
+            >
+              已有账号？登录
+            </a>
+            <a v-if="!isRegister" href="javascript:void(0)">忘记密码</a>
+          </div>
         </el-form>
       </VForm>
 
@@ -522,12 +571,6 @@ watch(
   color: #ffffff;
 }
 
-.tab.disabled {
-  background-color: #f3f4f6;
-  color: #9ca3af;
-  cursor: not-allowed;
-}
-
 .login-form {
   margin-top: 2px;
 }
@@ -542,7 +585,8 @@ watch(
   margin: 14px 0 4px;
 }
 
-.login-form :deep(.el-input__wrapper) {
+.login-form :deep(.el-input__wrapper),
+.login-form :deep(.el-date-editor.el-input__wrapper) {
   height: 42px;
   border-radius: 8px;
   background: #ffffff;
@@ -595,11 +639,38 @@ watch(
   background: #e5e7eb;
 }
 
+.register-row {
+  margin-top: 14px;
+}
+
+.gender-group {
+  width: 100%;
+}
+
+.gender-group :deep(.el-radio-button) {
+  width: 50%;
+}
+
+.gender-group :deep(.el-radio-button__inner) {
+  width: 100%;
+  height: 42px;
+  line-height: 20px;
+  padding: 10px 12px;
+}
+
+.login-form :deep(.el-date-editor) {
+  width: 100%;
+}
+
 .action-links {
   display: flex;
   justify-content: space-between;
   font-size: 13px;
   margin: 4px 6px 6px;
+}
+
+.action-links--single {
+  justify-content: center;
 }
 
 .action-links a {
@@ -622,5 +693,14 @@ watch(
 .agreement a {
   color: #2563eb;
 }
-</style>
 
+@media (max-width: 480px) {
+  .login-dialog {
+    width: calc(100vw - 24px) !important;
+  }
+
+  .register-row {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
