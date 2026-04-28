@@ -1,13 +1,34 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
+import { defineComponent, h } from 'vue'
 
-const { getProblemListMock } = vi.hoisted(() => ({
+const { getProblemListMock, pushMock, routeMock } = vi.hoisted(() => ({
   getProblemListMock: vi.fn(),
+  pushMock: vi.fn(),
+  routeMock: { query: {} as Record<string, unknown> },
 }))
 
 vi.mock('@/api/problem', () => ({
   getProblemList: getProblemListMock,
+}))
+
+vi.mock('vue-router', () => ({
+  useRouter: () => ({
+    push: pushMock,
+  }),
+  useRoute: () => routeMock,
+  RouterLink: defineComponent({
+    props: {
+      to: {
+        type: [String, Object],
+        default: '',
+      },
+    },
+    setup(props, { slots }) {
+      return () => h('a', { href: String(props.to) }, slots.default?.())
+    },
+  }),
 }))
 
 import ProblemSetView from '@/views/ProblemSetView.vue'
@@ -58,7 +79,25 @@ const mountProblemSet = async () => {
 describe('ProblemSetView filters', () => {
   beforeEach(() => {
     getProblemListMock.mockReset()
+    pushMock.mockReset()
+    routeMock.query = {}
     getProblemListMock.mockResolvedValue({ data: pagePayload })
+    vi.useRealTimers()
+  })
+
+  it('initializes keyword from route query and sends it to the list api', async () => {
+    routeMock.query = { keyword: 'P0001' }
+
+    const wrapper = await mountProblemSet()
+
+    expect((wrapper.get('[data-testid="problem-search-input"]').element as HTMLInputElement).value).toBe('P0001')
+    expect(getProblemListMock).toHaveBeenLastCalledWith({
+      page: 1,
+      size: 20,
+      keyword: 'P0001',
+    })
+
+    wrapper.unmount()
   })
 
   it('filters by difficulty when a difficulty chip is clicked', async () => {
@@ -121,5 +160,88 @@ describe('ProblemSetView filters', () => {
       size: 20,
     })
     expect(getProblemListMock.mock.lastCall?.[0]).not.toHaveProperty('orderBy')
+  })
+
+  it('clears keyword from the search clear button and refetches', async () => {
+    vi.useFakeTimers()
+    const wrapper = await mountProblemSet()
+
+    await wrapper.get('[data-testid="problem-search-input"]').setValue('two sum')
+    await vi.advanceTimersByTimeAsync(350)
+    await flushPromises()
+    expect(getProblemListMock).toHaveBeenLastCalledWith({
+      page: 1,
+      size: 20,
+      keyword: 'two sum',
+    })
+
+    await wrapper.get('[data-testid="problem-search-clear"]').trigger('click')
+    await flushPromises()
+
+    expect((wrapper.get('[data-testid="problem-search-input"]').element as HTMLInputElement).value).toBe('')
+    expect(getProblemListMock).toHaveBeenLastCalledWith({
+      page: 1,
+      size: 20,
+    })
+
+    wrapper.unmount()
+    vi.useRealTimers()
+  })
+
+  it('resets difficulty status tag and keyword from the clear filters button', async () => {
+    vi.useFakeTimers()
+    const wrapper = await mountProblemSet()
+
+    await wrapper.get('button.chip--easy').trigger('click')
+    await flushPromises()
+    const solvedButton = wrapper.findAll('button').find((button) => button.text() === '已通过')
+    await solvedButton!.trigger('click')
+    await flushPromises()
+    const tagButton = wrapper.findAll('button').find((button) => button.text() === '数组')
+    await tagButton!.trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="problem-search-input"]').setValue('abc')
+    await vi.advanceTimersByTimeAsync(350)
+    await flushPromises()
+
+    await wrapper.get('[data-testid="clear-filters-button"]').trigger('click')
+    await flushPromises()
+
+    expect(getProblemListMock).toHaveBeenLastCalledWith({
+      page: 1,
+      size: 20,
+    })
+    expect((wrapper.get('[data-testid="problem-search-input"]').element as HTMLInputElement).value).toBe('')
+
+    wrapper.unmount()
+    vi.useRealTimers()
+  })
+
+  it('renders a clearable empty state when no problem matches filters', async () => {
+    getProblemListMock.mockResolvedValue({
+      data: {
+        ...pagePayload,
+        records: [],
+        total: 0,
+      },
+    })
+
+    const wrapper = await mountProblemSet()
+
+    expect(wrapper.text()).toContain('暂无匹配题目')
+    expect(wrapper.find('[data-testid="empty-clear-filters"]').exists()).toBe(true)
+
+    wrapper.unmount()
+  })
+
+  it('keeps problem title links and makes table rows navigable', async () => {
+    const wrapper = await mountProblemSet()
+
+    expect(wrapper.get('a.problem-link').attributes('href')).toBe('/problems/1')
+    await wrapper.get('tr.problem-row').trigger('click')
+
+    expect(pushMock).toHaveBeenCalledWith('/problems/1')
+
+    wrapper.unmount()
   })
 })

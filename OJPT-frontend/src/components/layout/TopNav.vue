@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { RouterLink, useRouter } from 'vue-router'
+import { ref, computed, watch } from 'vue'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import LoginDialog from '@/components/auth/LoginDialog.vue'
 import UserAvatar from '@/components/common/UserAvatar.vue'
 import { useAuth } from '@/hooks/useAuth'
 
 const showLogin = ref(false)
 const showMenu = ref(false)
+const searchKeyword = ref('')
 const router = useRouter()
+const route = useRoute()
 const { isAuthed, user, logout } = useAuth()
 
 let hideTimer: ReturnType<typeof setTimeout> | null = null
@@ -52,6 +54,22 @@ const handleLogout = () => {
   showMenu.value = false
   router.push('/')
 }
+
+const submitSearch = () => {
+  const keyword = searchKeyword.value.trim()
+  router.push({
+    path: '/problemset',
+    query: keyword ? { keyword } : {},
+  })
+}
+
+watch(
+  () => route.query.keyword,
+  (keyword) => {
+    searchKeyword.value = typeof keyword === 'string' ? keyword : ''
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
@@ -69,7 +87,14 @@ const handleLogout = () => {
     </nav>
 
     <div class="nav-right">
-      <input class="nav-search" type="text" placeholder="搜索题目 / 标签 / 题号" />
+      <input
+        v-model="searchKeyword"
+        class="nav-search"
+        type="text"
+        placeholder="搜索题目 / 标签 / 题号"
+        data-testid="topnav-search-input"
+        @keydown.enter="submitSearch"
+      />
       <button
         v-if="!isAuthed"
         type="button"
@@ -346,4 +371,3 @@ const handleLogout = () => {
   }
 }
 </style>
-

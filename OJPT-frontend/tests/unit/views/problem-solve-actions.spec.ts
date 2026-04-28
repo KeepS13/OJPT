@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, h, nextTick } from 'vue'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import ElementPlus from 'element-plus'
 
 const {
@@ -434,6 +436,233 @@ describe('ProblemSolveView actions', () => {
 
     wrapper.unmount()
     vi.unstubAllGlobals()
+  })
+
+  it('loads multiple backend sample cases into editable case tabs without sample/custom mode buttons', async () => {
+    getProblemSampleTestCasesMock.mockResolvedValue({
+      data: [
+        { inputText: '1 2', expectedOutput: '3', explanation: null },
+        { inputText: '4 5', expectedOutput: '9', explanation: null },
+      ],
+    })
+
+    const wrapper = mount(ProblemSolveView, {
+      attachTo: document.body,
+      global: {
+        plugins: [ElementPlus],
+      },
+    })
+
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Case 1')
+    expect(wrapper.text()).toContain('Case 2')
+    expect(wrapper.text()).not.toContain('题目样例')
+    expect(wrapper.text()).not.toContain('我的测试')
+    expect(wrapper.findAll('.testcase-tab:not(.testcase-tab--add)')).toHaveLength(2)
+
+    const textareas = wrapper.findAll('textarea.testcase-textarea')
+    expect((textareas[0].element as HTMLTextAreaElement).readOnly).toBe(false)
+    expect((textareas[1].element as HTMLTextAreaElement).readOnly).toBe(false)
+
+    wrapper.unmount()
+    vi.unstubAllGlobals()
+  })
+
+  it('allows editing the default sample input and expected output', async () => {
+    const wrapper = mount(ProblemSolveView, {
+      attachTo: document.body,
+      global: {
+        plugins: [ElementPlus],
+      },
+    })
+
+    await flushPromises()
+
+    const textareas = wrapper.findAll('textarea.testcase-textarea')
+    await textareas[0].setValue('10 20')
+    await textareas[1].setValue('30')
+
+    expect((textareas[0].element as HTMLTextAreaElement).value).toBe('10 20')
+    expect((textareas[1].element as HTMLTextAreaElement).value).toBe('30')
+
+    wrapper.unmount()
+    vi.unstubAllGlobals()
+  })
+
+  it('submits all test cases after adding a copied case', async () => {
+    const wrapper = mount(ProblemSolveView, {
+      attachTo: document.body,
+      global: {
+        plugins: [ElementPlus],
+      },
+    })
+
+    await flushPromises()
+    saveProblemCodeDraftMock.mockClear()
+    runProblemCodeMock.mockClear()
+
+    await wrapper.get('.testcase-tab--add').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="run-code-button"]').trigger('click')
+    await flushPromises()
+
+    expect(runProblemCodeMock).toHaveBeenCalledWith(expect.objectContaining({
+      cases: [
+        { inputText: '1 2', expectedOutput: '3' },
+        { inputText: '1 2', expectedOutput: '3' },
+      ],
+    }))
+
+    wrapper.unmount()
+    vi.unstubAllGlobals()
+  })
+
+  it('falls back active case after deleting the selected case', async () => {
+    getProblemSampleTestCasesMock.mockResolvedValue({
+      data: [
+        { inputText: '1 2', expectedOutput: '3', explanation: null },
+        { inputText: '4 5', expectedOutput: '9', explanation: null },
+      ],
+    })
+
+    const wrapper = mount(ProblemSolveView, {
+      attachTo: document.body,
+      global: {
+        plugins: [ElementPlus],
+      },
+    })
+
+    await flushPromises()
+    await wrapper.findAll('.testcase-tab:not(.testcase-tab--add)')[1].trigger('click')
+    await wrapper.findAll('.testcase-tab:not(.testcase-tab--add)')[1].trigger('mouseenter')
+    await wrapper.get('.testcase-delete-btn').trigger('click')
+    await nextTick()
+
+    expect(wrapper.findAll('.testcase-tab:not(.testcase-tab--add)')).toHaveLength(1)
+    expect(wrapper.get('.testcase-tab--active').text()).toContain('Case 1')
+    expect((wrapper.findAll('textarea.testcase-textarea')[0].element as HTMLTextAreaElement).value).toBe('1 2')
+
+    wrapper.unmount()
+    vi.unstubAllGlobals()
+  })
+
+  it('keeps expected output after run and only updates returned case statuses', async () => {
+    getProblemSampleTestCasesMock.mockResolvedValue({
+      data: [
+        { inputText: '1 2', expectedOutput: '3', explanation: null },
+        { inputText: '4 5', expectedOutput: '9', explanation: null },
+        { inputText: '6 7', expectedOutput: '13', explanation: null },
+      ],
+    })
+    runProblemCodeMock.mockResolvedValue({
+      data: {
+        status: 'WA',
+        caseResults: [
+          {
+            caseIndex: 0,
+            status: 'AC',
+            inputText: '1 2',
+            expectedOutput: '3',
+            actualOutput: '999\n',
+            errorOutput: '',
+            timeMs: 8,
+            message: '通过',
+          },
+          {
+            caseIndex: 1,
+            status: 'WA',
+            inputText: '4 5',
+            expectedOutput: '9',
+            actualOutput: '8\n',
+            errorOutput: 'wrong output',
+            timeMs: 9,
+            message: '输出错误',
+          },
+        ],
+      },
+    })
+
+    const wrapper = mount(ProblemSolveView, {
+      attachTo: document.body,
+      global: {
+        plugins: [ElementPlus],
+      },
+    })
+
+    await flushPromises()
+    await wrapper.get('[data-testid="run-code-button"]').trigger('click')
+    await flushPromises()
+
+    await wrapper.findAll('.testcase-tab:not(.testcase-tab--add)')[0].trigger('click')
+    expect((wrapper.findAll('textarea.testcase-textarea')[1].element as HTMLTextAreaElement).value).toBe('3')
+    expect(wrapper.findAll('.testcase-icon--success')).toHaveLength(1)
+    expect(wrapper.findAll('.testcase-icon--failed')).toHaveLength(1)
+    expect(wrapper.findAll('.testcase-icon--default')).toHaveLength(1)
+
+    wrapper.unmount()
+    vi.unstubAllGlobals()
+  })
+
+  it('resets previous run statuses before running again when backend returns partial case results', async () => {
+    getProblemSampleTestCasesMock.mockResolvedValue({
+      data: [
+        { inputText: '1 2', expectedOutput: '3', explanation: null },
+        { inputText: '4 5', expectedOutput: '9', explanation: null },
+      ],
+    })
+    runProblemCodeMock
+      .mockResolvedValueOnce({
+        data: {
+          status: 'FINISHED',
+          caseResults: [
+            { caseIndex: 0, status: 'AC', inputText: '1 2', expectedOutput: '3', actualOutput: '3', errorOutput: '', timeMs: 1, message: 'ok' },
+            { caseIndex: 1, status: 'AC', inputText: '4 5', expectedOutput: '9', actualOutput: '9', errorOutput: '', timeMs: 1, message: 'ok' },
+          ],
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          status: 'WA',
+          caseResults: [
+            { caseIndex: 0, status: 'WA', inputText: '1 2', expectedOutput: '3', actualOutput: '0', errorOutput: 'wrong', timeMs: 1, message: 'wrong' },
+          ],
+        },
+      })
+
+    const wrapper = mount(ProblemSolveView, {
+      attachTo: document.body,
+      global: {
+        plugins: [ElementPlus],
+      },
+    })
+
+    await flushPromises()
+    await wrapper.get('[data-testid="run-code-button"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.findAll('.testcase-icon--success')).toHaveLength(2)
+
+    await wrapper.get('[data-testid="run-code-button"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.findAll('.testcase-icon--failed')).toHaveLength(1)
+    expect(wrapper.findAll('.testcase-icon--default')).toHaveLength(1)
+    expect(wrapper.findAll('.testcase-icon--success')).toHaveLength(0)
+
+    wrapper.unmount()
+    vi.unstubAllGlobals()
+  })
+
+  it('keeps testcase layout CSS flexible for splitter resizing', () => {
+    const source = readFileSync(resolve(__dirname, '../../../src/views/ProblemSolveView.vue'), 'utf8')
+
+    expect(source).toContain('.editor-footer {')
+    expect(source).toContain('height: 100%;')
+    expect(source).toContain('overflow: hidden;')
+    expect(source).toContain('grid-template-rows: minmax(0, 1fr) minmax(0, 0.75fr) auto;')
+    expect(source).toContain('.testcase-row {')
+    expect(source).toContain('min-height: 0;')
+    expect(source).toContain('height: 100%;')
+    expect(source).toContain('resize: none;')
   })
 
   it('submits code through the backend api', async () => {

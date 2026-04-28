@@ -662,7 +662,11 @@ const handleRunCode = async () => {
     return
   }
 
-  const cases = visibleTestCases.value.map((item) => ({
+  testCases.value.forEach((item) => {
+    item.status = 'default'
+  })
+
+  const cases = testCases.value.map((item) => ({
     inputText: item.inputText,
     expectedOutput: item.outputText,
   }))
@@ -685,11 +689,9 @@ const handleRunCode = async () => {
       cases,
     })
     runResult.value = result.data
-    const targetCases = activeTestMode.value === 'sample' ? sampleTestCases.value : testCases.value
     result.data.caseResults.forEach((caseResult) => {
-      const target = targetCases[caseResult.caseIndex]
+      const target = testCases.value[caseResult.caseIndex]
       if (!target) return
-      target.outputText = caseResult.actualOutput ?? ''
       target.status = caseResult.status === 'AC' ? 'success' : 'failed'
     })
     const allPassed = result.data.caseResults.every((item) => item.status === 'AC')
@@ -880,20 +882,9 @@ const loadProblemDetail = async () => {
     const data = body && typeof body === 'object' && 'data' in body ? body.data : body
     problemDetail.value = data as ProblemDetailVO
     await applyLanguageCode(activeLanguage.value)
-    sampleTestCases.value = (
+    testCases.value = (
       sampleCaseRes.data?.length ? sampleCaseRes.data : getProblemDefaultTestCases(problemDetail.value)
     ).map(toTestCase)
-    testCases.value = [
-      {
-        id: 1,
-        name: 'Case 1',
-        inputText: sampleTestCases.value[0]?.inputText || '',
-        outputText: '',
-        status: 'default',
-      },
-    ]
-    activeTestMode.value = sampleTestCases.value.length ? 'sample' : 'custom'
-    activeSampleCaseIndex.value = 0
     activeCaseIndex.value = 0
   } catch (e) {
     ElMessage.error('加载题目详情失败，请稍后重试')
@@ -936,39 +927,21 @@ const testCases = ref<TestCase[]>(
   getProblemDefaultTestCases({ problemNo: 1 }).map(toTestCase),
 )
 
-const sampleTestCases = ref<TestCase[]>([])
-const activeTestMode = ref<'sample' | 'custom'>('sample')
-const activeSampleCaseIndex = ref(0)
 const activeCaseIndex = ref(0)
 const hoveredCaseIndex = ref(-1)
 
-const visibleTestCases = computed(() =>
-  activeTestMode.value === 'sample' ? sampleTestCases.value : testCases.value,
-)
-
 const activeTestCase = computed(() => {
-  if (!visibleTestCases.value.length) return null
-  const currentIndex = activeTestMode.value === 'sample' ? activeSampleCaseIndex.value : activeCaseIndex.value
-  const index =
-    currentIndex >= 0 && currentIndex < visibleTestCases.value.length
-      ? currentIndex
-      : 0
-  return visibleTestCases.value[index]
+  if (!testCases.value.length) return null
+  const index = activeCaseIndex.value >= 0 && activeCaseIndex.value < testCases.value.length ? activeCaseIndex.value : 0
+  return testCases.value[index]
 })
 
 const onSelectTestCase = (index: number) => {
-  if (index < 0 || index >= visibleTestCases.value.length) return
-  if (activeTestMode.value === 'sample') {
-    activeSampleCaseIndex.value = index
-    return
-  }
+  if (index < 0 || index >= testCases.value.length) return
   activeCaseIndex.value = index
 }
 
 const onAddTestCase = () => {
-  if (activeTestMode.value !== 'custom') {
-    activeTestMode.value = 'custom'
-  }
   // 最多 8 个测试用例
   if (testCases.value.length >= 8) return
   const current = activeTestCase.value ?? testCases.value[0]
@@ -990,7 +963,6 @@ const onAddTestCase = () => {
 }
 
 const onDeleteTestCase = (index: number, event: MouseEvent) => {
-  if (activeTestMode.value !== 'custom') return
   event.stopPropagation()
   if (testCases.value.length <= 1) return
   if (index < 0 || index >= testCases.value.length) return
@@ -1014,7 +986,6 @@ const onDeleteTestCase = (index: number, event: MouseEvent) => {
 }
 
 const updateTestCaseInput = (caseIndex: number, value: string) => {
-  if (activeTestMode.value !== 'custom') return
   if (!testCases.value.length) return
   if (caseIndex < 0 || caseIndex >= testCases.value.length) return
   const target = testCases.value[caseIndex]
@@ -1023,7 +994,6 @@ const updateTestCaseInput = (caseIndex: number, value: string) => {
 }
 
 const updateTestCaseOutput = (caseIndex: number, value: string) => {
-  if (activeTestMode.value !== 'custom') return
   if (!testCases.value.length) return
   if (caseIndex < 0 || caseIndex >= testCases.value.length) return
   const target = testCases.value[caseIndex]
@@ -1044,6 +1014,8 @@ const storageKey = computed(() => `OJPT.solve.leftSplitRatio`)
 
 // 右侧编辑器内部上下分隔（代码区 / 测试用例区）
 const editorSplitterHeight = 8
+const editorTopMinHeight = 220
+const editorBottomMinHeight = 180
 const splitRatio = ref(0.6) // 上方代码区域所占比例
 const editorStorageKey = computed(() => `OJPT.solve.editorSplitRatio`)
 const editorPanelHeight = ref(0) // 右侧面板当前高度，用于按比例计算上下区域
@@ -1138,7 +1110,11 @@ const onInnerSplitterPointerMove = (e: PointerEvent) => {
   const pointerOffset = e.clientY - containerTop
   const nextRatio = pointerOffset / availableHeight
   if (Number.isFinite(nextRatio)) {
-    splitRatio.value = nextRatio
+    const minRatio = Math.min(1, editorTopMinHeight / availableHeight)
+    const maxRatio = Math.max(0, (availableHeight - editorBottomMinHeight) / availableHeight)
+    const lower = Math.min(minRatio, maxRatio)
+    const upper = Math.max(minRatio, maxRatio)
+    splitRatio.value = Math.min(upper, Math.max(lower, nextRatio))
   }
 }
 
@@ -1548,8 +1524,8 @@ const handleLogout = () => {
                 <button
                   type="button"
                   class="btn-icon-refresh"
-                  aria-label="Format code"
-                  title="Format code (Ctrl+Alt+L / Cmd+Option+L)"
+                  aria-label="格式化代码"
+                  title="格式化代码 (Ctrl+Alt+L / Cmd+Option+L)"
                   data-testid="format-code-button"
                   @click="handleFormatCodeClick"
                 >
@@ -1560,8 +1536,8 @@ const handleLogout = () => {
                 <button
                   type="button"
                   class="btn-icon-refresh"
-                  aria-label="Toggle line comment"
-                  title="Toggle line comment (Ctrl/Cmd+/)"
+                  aria-label="切换行注释"
+                  title="切换行注释 (Ctrl/Cmd+/)"
                   data-testid="comment-code-button"
                   @click="handleToggleCommentClick"
                 >
@@ -1572,8 +1548,8 @@ const handleLogout = () => {
                 <button
                   type="button"
                   class="btn-icon-refresh"
-                  aria-label="Show shortcuts"
-                  title="Show shortcuts"
+                  aria-label="查看快捷键"
+                  title="查看快捷键"
                   data-testid="shortcut-help-button"
                   @click="openShortcutTips"
                 >
@@ -1584,8 +1560,8 @@ const handleLogout = () => {
                 <button
                   type="button"
                   class="btn-icon-refresh"
-                  aria-label="Reset code to default template"
-                  title="Reset code to default template"
+                  aria-label="重置为默认代码模板"
+                  title="重置为默认代码模板"
                   data-testid="reset-code-button"
                   @click="resetCodeToDefault"
                 >
@@ -1656,27 +1632,9 @@ const handleLogout = () => {
           <footer class="editor-footer">
             <header class="testcase-header">
               <span class="editor-footer-title">测试用例</span>
-              <div class="testcase-mode-switch">
-                <button
-                  type="button"
-                  class="testcase-mode-btn"
-                  :class="{ 'testcase-mode-btn--active': activeTestMode === 'sample' }"
-                  @click="activeTestMode = 'sample'"
-                >
-                  题目样例
-                </button>
-                <button
-                  type="button"
-                  class="testcase-mode-btn"
-                  :class="{ 'testcase-mode-btn--active': activeTestMode === 'custom' }"
-                  @click="activeTestMode = 'custom'"
-                >
-                  我的测试
-                </button>
-              </div>
               <div class="testcase-tabs">
                 <button
-                  v-for="(item, index) in visibleTestCases"
+                  v-for="(item, index) in testCases"
                   :key="item.id"
                   type="button"
                   class="testcase-tab"
@@ -1684,8 +1642,8 @@ const handleLogout = () => {
                     'testcase-tab--active': index === activeCaseIndex,
                   }"
                   @click="onSelectTestCase(index)"
-                  @mouseenter="activeTestMode === 'custom' ? hoveredCaseIndex = index : null"
-                  @mouseleave="activeTestMode === 'custom' ? hoveredCaseIndex = -1 : null"
+                  @mouseenter="hoveredCaseIndex = index"
+                  @mouseleave="hoveredCaseIndex = -1"
                 >
                   <span
                     class="testcase-icon"
@@ -1696,7 +1654,7 @@ const handleLogout = () => {
                   />
                   <span class="testcase-name">Case {{ index + 1 }}</span>
                   <span
-                    v-if="activeTestMode === 'custom' && hoveredCaseIndex === index && testCases.length > 1"
+                    v-if="hoveredCaseIndex === index && testCases.length > 1"
                     class="testcase-delete-btn"
                     role="button"
                     tabindex="0"
@@ -1710,7 +1668,7 @@ const handleLogout = () => {
                   </span>
                 </button>
                 <button
-                  v-if="activeTestMode === 'custom' && testCases.length < 8"
+                  v-if="testCases.length < 8"
                   type="button"
                   class="testcase-tab testcase-tab--add"
                   @click="onAddTestCase"
@@ -1722,10 +1680,10 @@ const handleLogout = () => {
             </header>
             <div
               v-if="
-                visibleTestCases.length &&
+                testCases.length &&
                 activeTestCase &&
                 activeCaseIndex >= 0 &&
-                activeCaseIndex < visibleTestCases.length
+                activeCaseIndex < testCases.length
               "
               class="testcase-body"
             >
@@ -1737,21 +1695,19 @@ const handleLogout = () => {
                   class="testcase-textarea"
                   spellcheck="false"
                   rows="4"
-                  :readonly="activeTestMode === 'sample'"
                 />
               </div>
               <div class="testcase-row testcase-row--stacked">
-                <span class="testcase-label">输出</span>
+                <span class="testcase-label">期望输出</span>
                 <textarea
                   :value="activeTestCase.outputText"
                   @input="updateTestCaseOutput(activeCaseIndex, ($event.target as HTMLTextAreaElement).value)"
                   class="testcase-textarea"
                   spellcheck="false"
                   rows="2"
-                  :readonly="activeTestMode === 'sample'"
                 />
               </div>
-              <div v-if="activeTestMode === 'sample' && activeTestCase.explanation" class="testcase-explanation">
+              <div v-if="activeTestCase.explanation" class="testcase-explanation">
                 {{ activeTestCase.explanation }}
               </div>
             </div>
@@ -3317,7 +3273,10 @@ code {
   color: #4b5563;
   display: flex;
   flex-direction: column;
+  flex: 1;
+  height: 100%;
   min-height: 0;
+  overflow: hidden;
 }
 
 .testcase-header {
@@ -3335,30 +3294,6 @@ code {
   font-size: 12px;
   font-weight: 500;
   color: #111827;
-}
-
-.testcase-mode-switch {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 4px;
-}
-
-.testcase-mode-btn {
-  border: 1px solid #e5e7eb;
-  background: #ffffff;
-  color: #4b5563;
-  border-radius: 999px;
-  padding: 4px 10px;
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.testcase-mode-btn--active {
-  background: #eff6ff;
-  border-color: #bfdbfe;
-  color: #2563eb;
-  font-weight: 600;
 }
 
 .testcase-tabs {
@@ -3463,12 +3398,12 @@ code {
 }
 
 .testcase-body {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 0.75fr) auto;
   gap: 6px;
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 .testcase-row {
@@ -3476,10 +3411,12 @@ code {
   grid-template-columns: 60px minmax(0, 1fr);
   align-items: start;
   gap: 8px;
+  min-height: 0;
 }
 
 .testcase-row--stacked {
   grid-template-columns: 60px minmax(0, 1fr);
+  min-height: 0;
 }
 
 .editor-footer > .testcase-tab {
@@ -3518,10 +3455,12 @@ code {
   font-size: 12px;
   color: #111827;
   width: 100%;
-  min-height: 56px;
+  height: 100%;
+  min-height: 0;
   box-sizing: border-box;
   outline: none;
-  resize: vertical;
+  resize: none;
+  overflow: auto;
   line-height: 1.5;
   font-family: SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
 }

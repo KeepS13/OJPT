@@ -57,6 +57,21 @@ class ProblemBankMigrationContentTest {
         assertTrue(statement.contains("数据范围"), "problem 2 should include constraints");
     }
 
+    @Test
+    void baselineMigration_shouldUseCleanDefaultAccountSeeds() throws IOException {
+        String sql = Files.readString(MIGRATION);
+
+        assertTrue(!sql.contains("-- Source: V1_"), "baseline should not retain merged source migration markers");
+        assertTrue(!sql.contains("/avatars/"), "default accounts should not point at missing avatar files");
+        assertTrue(!Pattern.compile("(?m)^\\s*(DELETE FROM|SET @)").matcher(sql).find(),
+                "fresh baseline should not use cleanup/delete patch sections");
+
+        assertDefaultUserHasNullAvatar(sql, 1998338632572506113L, "admin", "admin@qq.com");
+        assertDefaultUserHasNullAvatar(sql, 1998338632572506114L, "admin1", "admin1@qq.com");
+        assertDefaultUserHasNullAvatar(sql, 1998338632572506117L, "user", "user@qq.com");
+        assertDefaultUserHasNullAvatar(sql, 1998338632572506121L, "user1", "user1@qq.com");
+    }
+
     private String extractProblemInsertBlock(String sql) {
         Matcher matcher = Pattern.compile(
                 "INSERT INTO `problem`\\s*\\((.*?)\\)\\s*VALUES\\s*(.*?)ON DUPLICATE KEY UPDATE",
@@ -77,5 +92,14 @@ class ProblemBankMigrationContentTest {
         }
 
         throw new AssertionError("a problem insert block with 30 sample problems should exist");
+    }
+
+    private void assertDefaultUserHasNullAvatar(String sql, long id, String username, String email) {
+        Pattern pattern = Pattern.compile(
+                "\\(\\s*" + id + "\\s*,\\s*'" + username + "'\\s*,\\s*'" + email
+                        + "'\\s*,\\s*'[^']*'\\s*,\\s*NULL\\s*,",
+                Pattern.DOTALL
+        );
+        assertTrue(pattern.matcher(sql).find(), username + " should be seeded with a NULL avatar");
     }
 }
