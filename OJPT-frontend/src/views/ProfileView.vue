@@ -622,30 +622,32 @@ onMounted(() => {
 .profile-view {
   max-width: 1000px;
   margin: 0 auto;
-  background-color: #ffffff;
-  border-radius: 12px;
-  padding: 32px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  background: linear-gradient(180deg, #ffffff 0%, #fcfcfd 100%);
+  border: 1px solid #e7ebf1;
+  border-radius: 18px;
+  padding: 34px;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.06);
 }
 
 .profile-header {
   margin-bottom: 32px;
   padding-bottom: 24px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid #e8edf3;
 }
 
 .profile-title {
-  font-size: 28px;
+  font-size: 30px;
   font-weight: 700;
-  color: #111827;
-  margin: 0 0 8px 0;
-  letter-spacing: -0.5px;
+  color: #0f172a;
+  margin: 0 0 10px 0;
+  letter-spacing: -0.04em;
 }
 
 .profile-subtitle {
   font-size: 14px;
-  color: #6b7280;
+  color: #64748b;
   margin: 0;
+  line-height: 1.6;
 }
 
 .profile-content {
@@ -656,11 +658,15 @@ onMounted(() => {
 .profile-avatar-section {
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 26px;
   margin-bottom: 40px;
-  padding: 24px;
-  background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
-  border-radius: 12px;
+  padding: 26px 28px;
+  background:
+    radial-gradient(circle at top left, rgba(59, 130, 246, 0.08), transparent 34%),
+    linear-gradient(135deg, #f8fbff 0%, #f3f6fa 100%);
+  border: 1px solid #e5ebf3;
+  border-radius: 16px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
 .avatar-wrapper {
@@ -689,7 +695,7 @@ onMounted(() => {
 
 .profile-avatar {
   border: 4px solid #ffffff;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
 }
 
 .avatar-uploader {
@@ -733,40 +739,45 @@ onMounted(() => {
 
 .avatar-info {
   flex: 1;
+  min-width: 0;
 }
 
 .username-display {
-  font-size: 24px;
+  font-size: 25px;
   font-weight: 600;
-  color: #111827;
-  margin: 0 0 4px 0;
+  color: #0f172a;
+  margin: 0 0 6px 0;
+  letter-spacing: -0.03em;
 }
 
 .username-hint {
   font-size: 13px;
-  color: #6b7280;
+  color: #64748b;
   margin: 0;
+  line-height: 1.6;
 }
 
 /* 表单卡片 */
 .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 24px;
-  margin-bottom: 24px;
+  gap: 22px;
+  margin-bottom: 22px;
 }
 
 .form-card {
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
+  border: 1px solid #e6ebf2;
+  border-radius: 16px;
   padding: 24px;
-  transition: all 0.2s ease;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.035);
 }
 
 .form-card:hover {
-  border-color: #d1d5db;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  border-color: #d8e1ec;
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.06);
+  transform: translateY(-1px);
 }
 
 .form-card-left,
@@ -777,25 +788,31 @@ onMounted(() => {
 .card-header {
   margin-bottom: 20px;
   padding-bottom: 16px;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid #eef2f7;
 }
 
 .card-title {
   font-size: 18px;
   font-weight: 600;
-  color: #111827;
+  color: #0f172a;
   margin: 0;
   display: flex;
   align-items: center;
   gap: 8px;
+  letter-spacing: -0.02em;
 }
 
 .card-icon {
-  font-size: 20px;
+  font-size: 18px;
   line-height: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  color: #2563eb;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.08);
 }
 
 .card-content {
@@ -821,24 +838,34 @@ onMounted(() => {
 .profile-form :deep(.el-form-item__label) {
   font-size: 13px;
   font-weight: 500;
-  color: #374151;
+  color: #334155;
   margin-bottom: 8px;
   padding: 0;
   line-height: 1.5;
 }
 
 .profile-form :deep(.el-input__wrapper) {
-  border-radius: 6px;
-  transition: all 0.2s ease;
+  border-radius: 10px;
+  box-shadow: 0 0 0 1px #dbe2ea inset;
+  transition: box-shadow 0.2s ease, transform 0.2s ease, background-color 0.2s ease;
 }
 
 .profile-form :deep(.el-input__wrapper:hover) {
-  box-shadow: 0 0 0 1px #d1d5db inset;
+  box-shadow: 0 0 0 1px #b9c6d8 inset;
 }
 
 .profile-form :deep(.el-input.is-disabled .el-input__wrapper) {
-  background-color: #f9fafb;
-  color: #6b7280;
+  background-color: #f7f9fc;
+  color: #64748b;
+  box-shadow: 0 0 0 1px #e3e8ef inset;
+}
+
+.profile-form :deep(.el-input__wrapper.is-focus),
+.profile-form :deep(.el-select__wrapper.is-focused),
+.profile-form :deep(.el-date-editor.is-active) {
+  box-shadow:
+    0 0 0 1px #3b82f6 inset,
+    0 0 0 4px rgba(59, 130, 246, 0.12);
 }
 
 .profile-form :deep(.el-radio-group) {
@@ -860,8 +887,15 @@ onMounted(() => {
 }
 
 .profile-form :deep(.el-textarea__inner) {
-  border-radius: 6px;
+  border-radius: 10px;
   font-family: inherit;
+  box-shadow: 0 0 0 1px #dbe2ea inset;
+}
+
+.profile-form :deep(.el-textarea__inner:focus) {
+  box-shadow:
+    0 0 0 1px #3b82f6 inset,
+    0 0 0 4px rgba(59, 130, 246, 0.12);
 }
 
 .field-error {
@@ -875,22 +909,23 @@ onMounted(() => {
 .form-actions {
   margin-top: 32px;
   padding-top: 24px;
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid #e8edf3;
   display: flex;
   gap: 12px;
   justify-content: flex-end;
 }
 
 .form-actions .el-button {
-  min-width: 120px;
+  min-width: 132px;
   font-weight: 500;
+  border-radius: 10px;
 }
 
 /* 响应式设计 */
 @media (max-width: 768px) {
   .profile-view {
-    padding: 20px;
-    border-radius: 8px;
+    padding: 22px;
+    border-radius: 14px;
   }
 
   .form-row {
@@ -905,7 +940,8 @@ onMounted(() => {
   .profile-avatar-section {
     flex-direction: column;
     text-align: center;
-    gap: 16px;
+    gap: 18px;
+    padding: 22px 20px;
   }
 
   .form-actions {

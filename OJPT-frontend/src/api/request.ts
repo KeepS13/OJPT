@@ -13,7 +13,7 @@ const PROACTIVE_REFRESH_THRESHOLD_MS = 5 * 60 * 1000
 let refreshTimerId: ReturnType<typeof setInterval> | null = null
 
 const request = axios.create({
-  baseURL: 'http://localhost/api',
+  baseURL: '/api',
   timeout: 10000,
   transformResponse: [
     (data) => {
@@ -152,14 +152,14 @@ const performTokenRefresh = async (authStore: ReturnType<typeof useAuthStore>) =
       if (meRes.data) {
         const avatarValue = meRes.data.avatar && meRes.data.avatar.trim() ? meRes.data.avatar : null
         const userId = typeof meRes.data.userId === 'number' ? String(meRes.data.userId) : meRes.data.userId
-        authStore.user = {
+        authStore.setUserProfile({
           userId,
           username: meRes.data.username,
           email: meRes.data.email,
           avatar: avatarValue,
           roleType: meRes.data.roleType,
           roles: meRes.data.roles,
-        }
+        })
       }
     } catch {
       // 获取用户信息失败不影响 token 刷新，静默失败
@@ -359,15 +359,14 @@ request.interceptors.response.use(
               // 确保userId是字符串类型
               const userId = typeof meRes.data.userId === 'number' ? String(meRes.data.userId) : meRes.data.userId
               // 只更新用户信息，不更新 token（token 已经更新过了）
-              authStore.user = {
-                ...authStore.user,
+              authStore.setUserProfile({
                 userId: userId,
                 username: meRes.data.username,
                 email: meRes.data.email,
                 avatar: latestAvatar,
                 roleType: meRes.data.roleType,
                 roles: meRes.data.roles,
-              }
+              })
             }
           })
           .catch(() => {

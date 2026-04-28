@@ -5,14 +5,18 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.example.ojpt.common.PageResult;
 import com.example.ojpt.common.PaginationUtils;
 import com.example.ojpt.dto.ProblemCreateDTO;
+import com.example.ojpt.dto.ProblemTestCaseBatchUpdateDTO;
+import com.example.ojpt.dto.ProblemTestCaseItemDTO;
 import com.example.ojpt.dto.ProblemUpdateDTO;
 import com.example.ojpt.vo.AdminProblemListItemVO;
 import com.example.ojpt.entity.Problem;
+import com.example.ojpt.entity.ProblemTestCase;
 import com.example.ojpt.entity.ProblemTag;
 import com.example.ojpt.entity.Tag;
 import com.example.ojpt.entity.UserProblemProgress;
 import com.example.ojpt.exception.BusinessException;
 import com.example.ojpt.mapper.ProblemMapper;
+import com.example.ojpt.mapper.ProblemTestCaseMapper;
 import com.example.ojpt.mapper.ProblemTagMapper;
 import com.example.ojpt.mapper.TagMapper;
 import com.example.ojpt.mapper.UserProblemProgressMapper;
@@ -20,6 +24,7 @@ import com.example.ojpt.service.ProblemService;
 import com.example.ojpt.vo.ProblemDetailVO;
 import com.example.ojpt.vo.ProblemListItemVO;
 import com.example.ojpt.vo.ProblemSimpleVO;
+import com.example.ojpt.vo.ProblemTestCaseVO;
 import com.example.ojpt.vo.TagVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -37,8 +42,11 @@ public class ProblemServiceImpl implements ProblemService {
     private static final String STATUS_DRAFT = "DRAFT";
     private static final String STATUS_PUBLISHED = "PUBLISHED";
     private static final String STATUS_ARCHIVED = "ARCHIVED";
+    private static final String CASE_TYPE_SAMPLE = "SAMPLE";
+    private static final String CASE_TYPE_HIDDEN = "HIDDEN";
 
     private final ProblemMapper problemMapper;
+    private final ProblemTestCaseMapper problemTestCaseMapper;
     private final TagMapper tagMapper;
     private final ProblemTagMapper problemTagMapper;
     private final UserProblemProgressMapper userProblemProgressMapper;
@@ -476,6 +484,73 @@ public class ProblemServiceImpl implements ProblemService {
 
         // 复用原详情逻辑：需要按 ID 查询标签与进度
         return getProblemDetail(problem.getId(), userId);
+    }
+
+    @Override
+    public List<ProblemTestCaseVO> getProblemTestCases(Long problemId) {
+        Problem problem = problemMapper.selectOne(
+                new LambdaQueryWrapper<Problem>()
+                        .eq(Problem::getId, problemId)
+                        .eq(Problem::getIsDeleted, 0)
+        );
+        if (problem == null) {
+            throw BusinessException.notFound("题目");
+        }
+
+        return problemTestCaseMapper.selectList(
+                new LambdaQueryWrapper<ProblemTestCase>()
+                        .eq(ProblemTestCase::getProblemId, problemId)
+                        .orderByAsc(ProblemTestCase::getCaseType)
+                        .orderByAsc(ProblemTestCase::getSortOrder)
+                        .orderByAsc(ProblemTestCase::getId)
+        ).stream().map(testCase -> {
+            ProblemTestCaseVO vo = new ProblemTestCaseVO();
+            vo.setId(testCase.getId());
+            vo.setCaseType(testCase.getCaseType());
+            vo.setSortOrder(testCase.getSortOrder());
+            vo.setInputText(testCase.getInputText());
+            vo.setExpectedOutput(testCase.getExpectedOutput());
+            vo.setExplanation(testCase.getExplanation());
+            return vo;
+        }).toList();
+    }
+
+    @Override
+    @Transactional
+    public void replaceProblemTestCases(Long problemId, ProblemTestCaseBatchUpdateDTO dto) {
+        Problem problem = problemMapper.selectOne(
+                new LambdaQueryWrapper<Problem>()
+                        .eq(Problem::getId, problemId)
+                        .eq(Problem::getIsDeleted, 0)
+        );
+        if (problem == null) {
+            throw BusinessException.notFound("题目");
+        }
+
+        List<ProblemTestCaseItemDTO> items = dto.getCases() == null ? List.of() : dto.getCases();
+        for (ProblemTestCaseItemDTO item : items) {
+            String caseType = item.getCaseType() == null ? "" : item.getCaseType().trim().toUpperCase();
+            if (!CASE_TYPE_SAMPLE.equals(caseType) && !CASE_TYPE_HIDDEN.equals(caseType)) {
+                throw BusinessException.badRequest("测试用例类型只能是 SAMPLE 或 HIDDEN");
+            }
+            item.setCaseType(caseType);
+        }
+
+        problemTestCaseMapper.delete(
+                new LambdaQueryWrapper<ProblemTestCase>()
+                        .eq(ProblemTestCase::getProblemId, problemId)
+        );
+
+        for (ProblemTestCaseItemDTO item : items) {
+            ProblemTestCase testCase = new ProblemTestCase()
+                    .setProblemId(problemId)
+                    .setCaseType(item.getCaseType())
+                    .setSortOrder(item.getSortOrder())
+                    .setInputText(item.getInputText())
+                    .setExpectedOutput(item.getExpectedOutput())
+                    .setExplanation(item.getExplanation());
+            problemTestCaseMapper.insert(testCase);
+        }
     }
 
     private ProblemSimpleVO toSimpleVO(Problem problem) {

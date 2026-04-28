@@ -18,6 +18,7 @@ vi.mock('@/api/request', () => ({
 
 import {
   getCurrentUserDetail,
+  getCurrentUserSubmissionRecords,
   updateUserInfo,
   uploadAvatar,
   deleteAvatar,
@@ -36,7 +37,7 @@ describe('user api', () => {
     deleteMock.mockReset()
   })
 
-  it('getCurrentUserDetail 应调用 /users/me/detail', async () => {
+  it('getCurrentUserDetail calls /users/me/detail', async () => {
     getMock.mockResolvedValue({ data: {} })
 
     await getCurrentUserDetail()
@@ -44,7 +45,17 @@ describe('user api', () => {
     expect(getMock).toHaveBeenCalledWith('/users/me/detail')
   })
 
-  it('updateUserInfo 应使用 PUT /users/me', async () => {
+  it('getCurrentUserSubmissionRecords calls /users/me/submissions with paging params', async () => {
+    getMock.mockResolvedValue({ data: {} })
+
+    await getCurrentUserSubmissionRecords({ page: 2, size: 20 })
+
+    expect(getMock).toHaveBeenCalledWith('/users/me/submissions', {
+      params: { page: 2, size: 20 },
+    })
+  })
+
+  it('updateUserInfo uses PUT /users/me', async () => {
     const payload = { email: 'test@example.com' }
     putMock.mockResolvedValue({ data: {} })
 
@@ -53,7 +64,7 @@ describe('user api', () => {
     expect(putMock).toHaveBeenCalledWith('/users/me', payload)
   })
 
-  it('uploadAvatar 应以 multipart/form-data 调用 /users/me/avatar', async () => {
+  it('uploadAvatar uses multipart/form-data on /users/me/avatar', async () => {
     const file = new File(['content'], 'avatar.webp', { type: 'image/webp' })
     postMock.mockResolvedValue({ data: {} })
 
@@ -66,7 +77,7 @@ describe('user api', () => {
     expect(config?.headers?.['Content-Type']).toBe('multipart/form-data')
   })
 
-  it('deleteAvatar 应向 /users/me/avatar 发送空表单 POST 请求', async () => {
+  it('deleteAvatar posts an empty form to /users/me/avatar', async () => {
     postMock.mockResolvedValue({ data: {} })
 
     await deleteAvatar()
@@ -77,7 +88,7 @@ describe('user api', () => {
     expect(formData).toBeInstanceOf(FormData)
   })
 
-  it('账号安全相关接口应使用 /users/me/* 路径', async () => {
+  it('security-related endpoints use /users/me/* paths', async () => {
     putMock.mockResolvedValue({ data: {} })
     deleteMock.mockResolvedValue({ data: {} })
 

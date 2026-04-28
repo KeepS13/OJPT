@@ -16,6 +16,7 @@ import com.example.ojpt.mapper.RoleMapper;
 import com.example.ojpt.mapper.UserMapper;
 import com.example.ojpt.mapper.UserProfileMapper;
 import com.example.ojpt.mapper.UserRoleMapper;
+import com.example.ojpt.security.SystemRoleScope;
 import com.example.ojpt.service.UserService;
 import com.example.ojpt.vo.CurrentUserVO;
 import com.example.ojpt.vo.UserDetailVO;
@@ -187,14 +188,14 @@ public class UserServiceImpl implements UserService {
             roleCodes.add(user.getRoleType());
         }
         
-        List<String> roles = roleCodes.stream().sorted().collect(Collectors.toList());
+        List<String> roles = SystemRoleScope.normalizeRoleCodes(roleCodes);
 
         return new CurrentUserVO(
                 user.getId(),
                 user.getUsername(),
                 user.getEmail(),
                 user.getAvatar(),
-                user.getRoleType(),
+                SystemRoleScope.normalizeRoleType(user.getRoleType()),
                 user.getStatus(),
                 roles,
                 user.getCreatedAt(),
@@ -225,7 +226,7 @@ public class UserServiceImpl implements UserService {
             roleCodes.add(user.getRoleType());
         }
 
-        List<String> roles = roleCodes.stream().sorted().collect(Collectors.toList());
+        List<String> roles = SystemRoleScope.normalizeRoleCodes(roleCodes);
 
         // 查询用户扩展信息（可能不存在）
         UserProfile profile = userProfileMapper.selectOne(new LambdaQueryWrapper<UserProfile>()
@@ -239,7 +240,7 @@ public class UserServiceImpl implements UserService {
         vo.setEmail(user.getEmail());
         vo.setPhone(user.getPhone());
         vo.setAvatar(user.getAvatar());
-        vo.setRoleType(user.getRoleType());
+        vo.setRoleType(SystemRoleScope.normalizeRoleType(user.getRoleType()));
         vo.setStatus(user.getStatus());
         vo.setRoles(roles);
         vo.setCreatedAt(user.getCreatedAt());
@@ -526,4 +527,3 @@ public class UserServiceImpl implements UserService {
         // 可以通过定时任务实现，定期清理已注销超过 30 天的用户数据
     }
 }
-

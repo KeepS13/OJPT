@@ -2,28 +2,42 @@ package com.example.ojpt.controller;
 
 import com.example.ojpt.common.PageResult;
 import com.example.ojpt.common.Result;
+import com.example.ojpt.dto.CodeRunDTO;
+import com.example.ojpt.dto.SubmissionCreateDTO;
 import com.example.ojpt.security.LoginUserDetails;
 import com.example.ojpt.service.ProblemService;
+import com.example.ojpt.service.ProblemTestCaseService;
+import com.example.ojpt.service.SubmissionService;
 import com.example.ojpt.vo.ProblemDetailVO;
 import com.example.ojpt.vo.ProblemListItemVO;
+import com.example.ojpt.vo.ProblemTestCaseVO;
+import com.example.ojpt.vo.CodeRunResultVO;
+import com.example.ojpt.vo.SubmissionCreateResultVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/problems")
 @RequiredArgsConstructor
-@Tag(name = "题目接口", description = "精简版题库浏览接口")
+@Tag(name = "题目接口", description = "题库浏览、样例测试用例与代码提交接口")
 public class ProblemController {
 
     private final ProblemService problemService;
+    private final ProblemTestCaseService problemTestCaseService;
+    private final SubmissionService submissionService;
 
     @GetMapping
     @Operation(summary = "题库列表")
@@ -50,6 +64,30 @@ public class ProblemController {
     @Operation(summary = "按题号获取题目详情")
     public Result<ProblemDetailVO> getProblemDetailByNo(@PathVariable("problemNo") Integer problemNo) {
         return Result.ok(problemService.getProblemDetailByNo(problemNo, getCurrentUserId()));
+    }
+
+    @GetMapping("/no/{problemNo}/test-cases/sample")
+    @Operation(summary = "按题号获取公开样例测试用例")
+    public Result<List<ProblemTestCaseVO>> getProblemSampleTestCases(@PathVariable("problemNo") Integer problemNo) {
+        return Result.ok(problemTestCaseService.getSampleTestCasesByProblemNo(problemNo));
+    }
+
+    @PostMapping("/no/{problemNo}/submissions")
+    @Operation(summary = "提交代码", description = "按题号提交代码，当前版本先记录提交并进入等待判题状态")
+    public Result<SubmissionCreateResultVO> submitCode(
+            @PathVariable("problemNo") Integer problemNo,
+            @Valid @RequestBody SubmissionCreateDTO dto) {
+        Long userId = getCurrentUserId();
+        if (userId == null) {
+            throw com.example.ojpt.exception.BusinessException.unauthorized("未登录");
+        }
+        return Result.ok(submissionService.createSubmission(userId, problemNo, dto));
+    }
+
+    @PostMapping("/run")
+    @Operation(summary = "运行代码", description = "使用页面传入的公开样例或自定义用例同步运行代码")
+    public Result<CodeRunResultVO> runCode(@Valid @RequestBody CodeRunDTO dto) {
+        return Result.ok(submissionService.runCode(dto));
     }
 
     private Long getCurrentUserId() {

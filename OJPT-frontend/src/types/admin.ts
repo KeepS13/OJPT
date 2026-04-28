@@ -75,5 +75,19 @@ export interface ProblemUpdateDTO {
   memoryLimitKb?: number | null
 }
 
-export type { UserDetail }
+export type ProblemTestCaseType = 'SAMPLE' | 'HIDDEN'
 
+export interface ProblemTestCaseVO {
+  id?: string
+  caseType: ProblemTestCaseType
+  sortOrder: number
+  inputText: string
+  expectedOutput: string
+  explanation?: string | null
+}
+
+export interface ProblemTestCaseBatchUpdateDTO {
+  cases: ProblemTestCaseVO[]
+}
+
+export type { UserDetail }

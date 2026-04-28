@@ -11,6 +11,7 @@ import com.example.ojpt.service.UserService;
 import com.example.ojpt.security.JwtService;
 import com.example.ojpt.security.LoginUserDetails;
 import com.example.ojpt.security.RefreshTokenStore;
+import com.example.ojpt.security.SystemRoleScope;
 import com.example.ojpt.security.TokenBlacklistService;
 import com.example.ojpt.vo.CurrentUserVO;
 import com.example.ojpt.vo.LoginResponseVO;
@@ -157,7 +158,7 @@ public class AuthController {
         }
         String username = claims.get("username", String.class);
         @SuppressWarnings("unchecked")
-        List<String> roles = claims.get("roles", List.class);
+        List<String> roles = SystemRoleScope.normalizeRoleCodes(claims.get("roles", List.class));
         String jti = claims.getId();
         Long userId = Long.parseLong(claims.getSubject());
 
@@ -227,16 +228,16 @@ public class AuthController {
             throw BusinessException.userNotFound();
         }
 
-        List<String> roles = authentication.getAuthorities().stream()
+        List<String> roles = SystemRoleScope.normalizeRoleCodes(authentication.getAuthorities().stream()
                 .map(a -> a.getAuthority().replace("ROLE_", ""))
-                .toList();
+                .toList());
 
         CurrentUserVO vo = new CurrentUserVO(
                 user.getId(),
                 user.getUsername(),
                 user.getEmail(),
                 user.getAvatar(),
-                user.getRoleType(),
+                SystemRoleScope.normalizeRoleType(user.getRoleType()),
                 user.getStatus(),
                 roles,
                 user.getCreatedAt(),
@@ -288,4 +289,3 @@ public class AuthController {
         return Result.ok("登出成功");
     }
 }
-

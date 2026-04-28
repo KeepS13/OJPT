@@ -10,6 +10,8 @@ import type {
   AdminProblemListParams,
   ProblemUpdateDTO,
   TagVO,
+  ProblemTestCaseVO,
+  ProblemTestCaseBatchUpdateDTO,
 } from '@/types/admin'
 import type { UserUpdateDTO } from './user'
 
@@ -19,22 +21,22 @@ export function getUserList(params?: UserListParams) {
 }
 
 // 获取用户详情
-export function getUserDetail(userId: string) {
+export function getUserDetail(userId: string | number) {
   return request.get<UserDetail>(`/admin/users/${userId}`)
 }
 
 // 更新用户信息
-export function updateUser(userId: string, payload: UserUpdateDTO) {
+export function updateUser(userId: string | number, payload: UserUpdateDTO) {
   return request.put<void>(`/admin/users/${userId}`, payload)
 }
 
 // 删除用户（软删除）
-export function deleteUser(userId: string) {
+export function deleteUser(userId: string | number) {
   return request.delete<void>(`/admin/users/${userId}`)
 }
 
 // 修改用户状态
-export function updateUserStatus(userId: string, payload: UserStatusUpdateDTO) {
+export function updateUserStatus(userId: string | number, payload: UserStatusUpdateDTO) {
   return request.put<void>(`/admin/users/${userId}/status`, payload)
 }
 
@@ -56,6 +58,17 @@ export function getAdminProblemList(params?: AdminProblemListParams) {
 
 export function getAdminProblemDetail(problemId: string) {
   return request.get<unknown>(`/admin/problems/${problemId}`)
+}
+
+export function getAdminProblemTestCases(problemId: string) {
+  return request.get<ProblemTestCaseVO[]>(`/admin/problems/${problemId}/test-cases`)
+}
+
+export function replaceAdminProblemTestCases(
+  problemId: string,
+  payload: ProblemTestCaseBatchUpdateDTO,
+) {
+  return request.put<void>(`/admin/problems/${problemId}/test-cases`, payload)
 }
 
 export function updateAdminProblem(problemId: string, payload: ProblemUpdateDTO) {
@@ -81,4 +94,3 @@ export function addTagToAdminProblem(problemId: string, tagId: string | number) 
 export function removeTagFromAdminProblem(problemId: string, tagId: string | number) {
   return request.delete<void>(`/admin/problems/${problemId}/tags`, { params: { tagId } })
 }
-

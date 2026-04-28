@@ -17,8 +17,8 @@ import java.util.List;
  * OpenAPI / Swagger 配置
  * 
  * 访问地址：
- * - Swagger UI: http://localhost:8080/swagger-ui.html
- * - OpenAPI JSON: http://localhost:8080/v3/api-docs
+ * - Swagger UI: http://localhost:8111/swagger-ui.html
+ * - OpenAPI JSON: http://localhost:8111/v3/api-docs
  */
 @Configuration
 public class OpenApiConfig {
@@ -40,7 +40,7 @@ public class OpenApiConfig {
                                 .url("https://opensource.org/licenses/MIT")))
                 .servers(List.of(
                         new Server()
-                                .url("http://localhost:8080")
+                                .url("http://localhost:8111")
                                 .description("本地开发环境"),
                         new Server()
                                 .url("http://localhost/api")

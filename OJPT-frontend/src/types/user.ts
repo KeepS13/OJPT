@@ -1,10 +1,10 @@
 import type { CurrentUser } from './auth'
+import type { UserSubmissionRecord } from '@/api/user'
 
-// 用户详细信息（包含扩展信息）
 export interface UserDetail extends CurrentUser {
   phone?: string
-  gender?: number // 0未知/1男/2女
-  birthday?: string // YYYY-MM-DD
+  gender?: number
+  birthday?: string
   address?: string
   website?: string
   github?: string
@@ -17,3 +17,4 @@ export interface UserDetail extends CurrentUser {
   tags?: string
 }
 
+export type { UserSubmissionRecord }

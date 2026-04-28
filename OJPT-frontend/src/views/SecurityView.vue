@@ -580,23 +580,25 @@ onMounted(() => {
 .security-view {
   max-width: 800px;
   margin: 0 auto;
-  background-color: #ffffff;
-  border-radius: 12px;
-  padding: 32px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  background: linear-gradient(180deg, #ffffff 0%, #fcfcfd 100%);
+  border: 1px solid #e7ebf1;
+  border-radius: 18px;
+  padding: 34px;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.06);
 }
 
 .security-header {
   margin-bottom: 32px;
   padding-bottom: 24px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid #e8edf3;
 }
 
 .security-title {
-  font-size: 24px;
-  font-weight: 600;
-  color: #111827;
+  font-size: 28px;
+  font-weight: 700;
+  color: #0f172a;
   margin: 0;
+  letter-spacing: -0.03em;
 }
 
 .security-content {
@@ -610,26 +612,27 @@ onMounted(() => {
 }
 
 .section-title {
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 600;
-  color: #111827;
+  color: #0f172a;
   margin: 0 0 16px 0;
 }
 
 .info-list {
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
+  border: 1px solid #e6ebf2;
+  border-radius: 16px;
   overflow: hidden;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.035);
 }
 
 .info-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid #f3f4f6;
-  transition: background-color 0.2s ease;
+  padding: 18px 22px;
+  border-bottom: 1px solid #eef2f7;
+  transition: background-color 0.2s ease, transform 0.2s ease;
 }
 
 .info-row:last-child {
@@ -637,7 +640,7 @@ onMounted(() => {
 }
 
 .info-row:hover {
-  background-color: #f9fafb;
+  background-color: #f8fbff;
 }
 
 .info-left {
@@ -649,14 +652,15 @@ onMounted(() => {
 
 .info-label {
   font-size: 14px;
-  color: #6b7280;
+  color: #64748b;
   font-weight: 400;
 }
 
 .info-value {
   font-size: 15px;
-  color: #111827;
-  font-weight: 400;
+  color: #0f172a;
+  font-weight: 500;
+  line-height: 1.5;
 }
 
 .info-right {
@@ -668,24 +672,25 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
-  background: transparent;
-  border: none;
+  padding: 8px 12px;
+  background: rgba(37, 99, 235, 0.06);
+  border: 1px solid rgba(37, 99, 235, 0.1);
   color: #2563eb;
   font-size: 14px;
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: 999px;
   transition: all 0.2s ease;
   user-select: none;
 }
 
 .edit-btn:hover {
-  background-color: #eff6ff;
+  background-color: rgba(37, 99, 235, 0.1);
   color: #1d4ed8;
+  border-color: rgba(37, 99, 235, 0.18);
 }
 
 .edit-btn:active {
-  background-color: #dbeafe;
+  background-color: rgba(37, 99, 235, 0.14);
 }
 
 .edit-btn svg {
@@ -695,41 +700,45 @@ onMounted(() => {
 .delete-section {
   display: flex;
   justify-content: flex-end;
-  padding-top: 8px;
+  padding: 18px 20px;
+  border: 1px solid rgba(239, 68, 68, 0.14);
+  background: linear-gradient(180deg, #fff8f8 0%, #fffdfd 100%);
+  border-radius: 16px;
 }
 
 .delete-btn {
-  padding: 10px 20px;
+  padding: 10px 22px;
   background: transparent;
   border: 1px solid #ef4444;
   color: #ef4444;
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: 999px;
   transition: all 0.2s ease;
   user-select: none;
 }
 
 .delete-btn:hover {
-  background-color: #fee2e2;
+  background-color: #fef0f0;
   border-color: #dc2626;
   color: #dc2626;
+  box-shadow: 0 8px 18px rgba(239, 68, 68, 0.12);
 }
 
 .delete-btn:active {
-  background-color: #fecaca;
+  background-color: #fee2e2;
 }
 
 /* 响应式设计 */
 @media (max-width: 768px) {
   .security-view {
-    padding: 20px;
-    border-radius: 8px;
+    padding: 22px;
+    border-radius: 14px;
   }
 
   .info-row {
-    padding: 14px 16px;
+    padding: 16px 18px;
     flex-direction: column;
     align-items: flex-start;
     gap: 12px;
@@ -752,6 +761,12 @@ onMounted(() => {
 /* 确认弹窗统一样式 */
 .delete-confirm-dialog :deep(.el-dialog) {
   margin-top: 15vh !important;
+  border-radius: 18px;
+  overflow: hidden;
+}
+
+.delete-confirm-dialog :deep(.el-dialog__header) {
+  padding-bottom: 4px;
 }
 
 .delete-confirm-dialog :deep(.el-dialog__body) {

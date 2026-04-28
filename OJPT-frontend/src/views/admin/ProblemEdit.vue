@@ -6,12 +6,14 @@ import { ArrowLeft, DocumentChecked, RefreshRight } from '@element-plus/icons-vu
 import {
   addTagToAdminProblem,
   getAdminProblemDetail,
+  getAdminProblemTestCases,
   getAdminTags,
   removeTagFromAdminProblem,
+  replaceAdminProblemTestCases,
   updateAdminProblem,
 } from '@/api/admin'
 import { renderMarkdown } from '@/utils/markdown'
-import type { ProblemUpdateDTO, TagVO } from '@/types/admin'
+import type { ProblemTestCaseVO, ProblemUpdateDTO, TagVO } from '@/types/admin'
 
 type Difficulty = 'EASY' | 'MEDIUM' | 'HARD'
 
@@ -37,6 +39,8 @@ const saving = ref(false)
 
 const detail = ref<AdminProblemDetail | null>(null)
 const allTags = ref<TagVO[]>([])
+const sampleCases = ref<ProblemTestCaseVO[]>([])
+const hiddenCases = ref<ProblemTestCaseVO[]>([])
 
 const form = ref<ProblemUpdateDTO>({
   title: '',
@@ -50,6 +54,14 @@ const originalTagIds = ref<string[]>([])
 const selectedTagIds = ref<string[]>([])
 
 const previewHtml = computed(() => (form.value.statementMd ? renderMarkdown(form.value.statementMd) : ''))
+
+const createEmptyCase = (caseType: 'SAMPLE' | 'HIDDEN', sortOrder: number): ProblemTestCaseVO => ({
+  caseType,
+  sortOrder,
+  inputText: '',
+  expectedOutput: '',
+  explanation: '',
+})
 
 const loadDetail = async () => {
   loading.value = true
@@ -87,16 +99,43 @@ const loadTags = async () => {
   }
 }
 
+const loadTestCases = async () => {
+  try {
+    const res = await getAdminProblemTestCases(problemId.value)
+    const cases = res.data ?? []
+    sampleCases.value = cases
+      .filter((item) => item.caseType === 'SAMPLE')
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+    hiddenCases.value = cases
+      .filter((item) => item.caseType === 'HIDDEN')
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+  } catch (error: unknown) {
+    const err = error as { response?: { data?: { message?: string } }; message?: string }
+    ElMessage.error(err?.response?.data?.message || err?.message || '加载测试用例失败')
+  }
+}
+
+const addCase = (caseType: 'SAMPLE' | 'HIDDEN') => {
+  const target = caseType === 'SAMPLE' ? sampleCases.value : hiddenCases.value
+  target.push(createEmptyCase(caseType, target.length + 1))
+}
+
+const removeCase = (caseType: 'SAMPLE' | 'HIDDEN', index: number) => {
+  const target = caseType === 'SAMPLE' ? sampleCases.value : hiddenCases.value
+  target.splice(index, 1)
+  target.forEach((item, idx) => {
+    item.sortOrder = idx + 1
+  })
+}
+
 const save = async () => {
   if (!problemId.value) return
   if (saving.value) return
 
   saving.value = true
   try {
-    // 1) 更新题目基础字段
     await updateAdminProblem(problemId.value, form.value)
 
-    // 2) 同步标签绑定（按 diff 增删）
     const current = new Set(selectedTagIds.value.map(String))
     const original = new Set(originalTagIds.value.map(String))
 
@@ -110,11 +149,29 @@ const save = async () => {
       await removeTagFromAdminProblem(problemId.value, id)
     }
 
+    const normalizedCases: ProblemTestCaseVO[] = [
+      ...sampleCases.value.map((item, index) => ({
+        ...item,
+        caseType: 'SAMPLE' as const,
+        sortOrder: index + 1,
+        explanation: item.explanation || '',
+      })),
+      ...hiddenCases.value.map((item, index) => ({
+        ...item,
+        caseType: 'HIDDEN' as const,
+        sortOrder: index + 1,
+        explanation: item.explanation || '',
+      })),
+    ]
+
+    await replaceAdminProblemTestCases(problemId.value, {
+      cases: normalizedCases,
+    })
+
     originalTagIds.value = Array.from(current)
     ElMessage.success('保存成功')
 
-    // 重新加载一次，确保展示与后端一致
-    await loadDetail()
+    await Promise.all([loadDetail(), loadTestCases()])
   } catch (error: unknown) {
     const err = error as { response?: { data?: { message?: string } }; message?: string }
     ElMessage.error(err?.response?.data?.message || err?.message || '保存失败')
@@ -128,7 +185,7 @@ const back = () => {
 }
 
 onMounted(async () => {
-  await Promise.all([loadDetail(), loadTags()])
+  await Promise.all([loadDetail(), loadTags(), loadTestCases()])
 })
 </script>
 
@@ -150,12 +207,7 @@ onMounted(async () => {
       </div>
       <div class="actions">
         <el-button :icon="RefreshRight" :loading="loading" @click="loadDetail">刷新</el-button>
-        <el-button
-          type="primary"
-          :icon="DocumentChecked"
-          :loading="saving"
-          @click="save"
-        >
+        <el-button type="primary" :icon="DocumentChecked" :loading="saving" @click="save">
           保存
         </el-button>
       </div>
@@ -218,6 +270,68 @@ onMounted(async () => {
             </div>
           </div>
         </el-form-item>
+
+        <div class="case-block">
+          <div class="case-block__header">
+            <div>
+              <div class="case-block__title">样例测试用例</div>
+              <div class="case-block__desc">公开展示给用户，做题页只读显示</div>
+            </div>
+            <el-button size="small" @click="addCase('SAMPLE')">新增样例</el-button>
+          </div>
+
+          <div v-if="sampleCases.length" class="case-list">
+            <div v-for="(item, index) in sampleCases" :key="`sample-${index}`" class="case-card">
+              <div class="case-card__top">
+                <span class="case-card__name">Sample {{ index + 1 }}</span>
+                <el-button text type="danger" @click="removeCase('SAMPLE', index)">删除</el-button>
+              </div>
+              <div class="grid2">
+                <el-form-item label="输入">
+                  <el-input v-model="item.inputText" type="textarea" :rows="4" />
+                </el-form-item>
+                <el-form-item label="输出">
+                  <el-input v-model="item.expectedOutput" type="textarea" :rows="4" />
+                </el-form-item>
+              </div>
+              <el-form-item label="说明">
+                <el-input v-model="item.explanation" placeholder="可选：补充该样例说明" />
+              </el-form-item>
+            </div>
+          </div>
+          <div v-else class="case-empty">暂无样例测试用例</div>
+        </div>
+
+        <div class="case-block">
+          <div class="case-block__header">
+            <div>
+              <div class="case-block__title">隐藏测试用例</div>
+              <div class="case-block__desc">仅用于提交判题，不在做题页展示</div>
+            </div>
+            <el-button size="small" @click="addCase('HIDDEN')">新增隐藏用例</el-button>
+          </div>
+
+          <div v-if="hiddenCases.length" class="case-list">
+            <div v-for="(item, index) in hiddenCases" :key="`hidden-${index}`" class="case-card">
+              <div class="case-card__top">
+                <span class="case-card__name">Hidden {{ index + 1 }}</span>
+                <el-button text type="danger" @click="removeCase('HIDDEN', index)">删除</el-button>
+              </div>
+              <div class="grid2">
+                <el-form-item label="输入">
+                  <el-input v-model="item.inputText" type="textarea" :rows="4" />
+                </el-form-item>
+                <el-form-item label="输出">
+                  <el-input v-model="item.expectedOutput" type="textarea" :rows="4" />
+                </el-form-item>
+              </div>
+              <el-form-item label="说明">
+                <el-input v-model="item.explanation" placeholder="可选：内部备注" />
+              </el-form-item>
+            </div>
+          </div>
+          <div v-else class="case-empty">暂无隐藏测试用例</div>
+        </div>
       </el-form>
     </el-card>
   </div>
@@ -284,8 +398,6 @@ onMounted(async () => {
   gap: 12px;
   align-items: stretch;
   width: 100%;
-  flex: 1 1 auto;
-  box-sizing: border-box;
 }
 
 .editor-pane,
@@ -326,29 +438,89 @@ onMounted(async () => {
   align-items: center;
 }
 
-@media (max-width: 1024px) {
-  .md-split {
-    grid-template-columns: 1fr;
-  }
+.case-block {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 14px;
+  background: #fcfcfd;
+}
+
+.case-block + .case-block {
+  margin-top: 14px;
+}
+
+.case-block__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.case-block__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.case-block__desc {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 2px;
+}
+
+.case-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.case-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.case-card__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.case-card__name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.case-empty {
+  font-size: 13px;
+  color: #9ca3af;
+  padding: 6px 0 2px;
 }
 
 .markdown-body {
   font-size: 13px;
   color: #374151;
+  line-height: 1.7;
 }
 
-/* 复用学员端 markdown 样式的最小集合，保证预览不至于“裸” */
 :deep(.markdown-body > h1:first-child) {
   display: none;
 }
+
 :deep(.markdown-body p) {
   margin: 0 0 8px 0;
 }
+
 :deep(.markdown-body ul),
 :deep(.markdown-body ol) {
   padding-left: 20px;
   margin: 0 0 8px 0;
 }
+
 :deep(.markdown-body > ul) {
   list-style: none;
   padding: 8px 14px;
@@ -357,17 +529,47 @@ onMounted(async () => {
   background-color: #f9fafb;
   border-radius: 4px;
 }
+
 :deep(.markdown-body code) {
   background-color: #f3f4f6;
   padding: 0 4px;
   border-radius: 4px;
 }
+
 :deep(.markdown-body pre) {
-  background-color: #111827;
-  color: #f9fafb;
-  border-radius: 8px;
-  padding: 10px 12px;
-  overflow: auto;
+  font-family: SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 12px;
+  background-color: #f9fafb;
+  color: #111827;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+  white-space: pre-wrap;
+  margin: 0 0 8px 0;
+  overflow-x: auto;
+}
+
+:deep(.markdown-body pre code) {
+  background-color: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+  color: inherit;
+}
+
+@media (max-width: 1024px) {
+  .md-split,
+  .grid2 {
+    grid-template-columns: 1fr;
+  }
+
+  .topbar {
+    grid-template-columns: 1fr;
+    align-items: flex-start;
+  }
+
+  .actions {
+    width: 100%;
+  }
 }
 </style>
-

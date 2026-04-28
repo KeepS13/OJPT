@@ -70,14 +70,14 @@ async function bootstrapAuth(store: ReturnType<typeof useAuthStore>) {
             typeof res.data.userId === 'number'
               ? String(res.data.userId)
               : res.data.userId
-          store.user = {
+          store.setUserProfile({
             userId,
             username: res.data.username,
             email: res.data.email,
             avatar: avatarValue,
             roleType: res.data.roleType,
             roles: res.data.roles,
-          }
+          })
         } catch {
           store.clear()
           clearTokens()
@@ -140,5 +140,4 @@ export function useAuth() {
     logout,
   }
 }
-
 

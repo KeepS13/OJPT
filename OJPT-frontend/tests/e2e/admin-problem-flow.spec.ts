@@ -15,7 +15,7 @@ async function uiLogin(page: import('@playwright/test').Page, account: string) {
 
 test('草稿→管理端发布→学员端可见', async ({ page, request }) => {
   // 1) 用普通用户 token 创建草稿
-  const loginRes = await request.post('http://localhost:8080/api/auth/login', {
+  const loginRes = await request.post('http://localhost:8111/api/auth/login', {
     headers: { 'Content-Type': 'application/json' },
     data: { account: USER_EMAIL, password: PASSWORD },
   })
@@ -25,7 +25,7 @@ test('草稿→管理端发布→学员端可见', async ({ page, request }) => 
   expect(userAccessToken).toBeTruthy()
 
   const title = `e2e-draft-${Date.now()}`
-  const createRes = await request.post('http://localhost:8080/api/problems', {
+  const createRes = await request.post('http://localhost:8111/api/problems', {
     headers: {
       Authorization: `Bearer ${userAccessToken}`,
       'Content-Type': 'application/json',

@@ -2,6 +2,7 @@ package com.example.ojpt.controller;
 
 import com.example.ojpt.common.PageResult;
 import com.example.ojpt.common.Result;
+import com.example.ojpt.dto.ProblemTestCaseBatchUpdateDTO;
 import com.example.ojpt.dto.ProblemUpdateDTO;
 import com.example.ojpt.dto.TagCreateDTO;
 import com.example.ojpt.dto.TagUpdateDTO;
@@ -10,10 +11,12 @@ import com.example.ojpt.exception.BusinessException;
 import com.example.ojpt.security.LoginUserDetails;
 import com.example.ojpt.service.AdminService;
 import com.example.ojpt.service.ProblemService;
+import com.example.ojpt.service.ProblemTestCaseService;
 import com.example.ojpt.service.TagService;
 import com.example.ojpt.service.UserService;
 import com.example.ojpt.vo.AdminProblemListItemVO;
 import com.example.ojpt.vo.ProblemSimpleVO;
+import com.example.ojpt.vo.ProblemTestCaseVO;
 import com.example.ojpt.vo.StatisticsVO;
 import com.example.ojpt.vo.TagVO;
 import com.example.ojpt.vo.UserDetailVO;
@@ -41,12 +44,13 @@ import java.util.Map;
 @RequestMapping("/api/admin")
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('ADMIN')")
-@Tag(name = "管理员接口", description = "精简版管理员接口，仅保留用户、题目、标签与统计能力")
+@Tag(name = "管理员接口", description = "用户、题目、测试用例、标签与统计接口")
 public class AdminController {
 
     private final AdminService adminService;
     private final UserService userService;
     private final ProblemService problemService;
+    private final ProblemTestCaseService problemTestCaseService;
     private final TagService tagService;
 
     @GetMapping("/users")
@@ -128,6 +132,21 @@ public class AdminController {
     public Result<Void> updateProblem(@PathVariable Long problemId, @Valid @RequestBody ProblemUpdateDTO dto) {
         problemService.updateProblem(problemId, dto);
         return Result.ok("更新成功");
+    }
+
+    @GetMapping("/problems/{problemId}/test-cases")
+    @Operation(summary = "获取题目测试用例")
+    public Result<List<ProblemTestCaseVO>> getProblemTestCases(@PathVariable Long problemId) {
+        return Result.ok(problemTestCaseService.getProblemTestCases(problemId));
+    }
+
+    @PutMapping("/problems/{problemId}/test-cases")
+    @Operation(summary = "替换题目测试用例")
+    public Result<Void> replaceProblemTestCases(
+            @PathVariable Long problemId,
+            @Valid @RequestBody ProblemTestCaseBatchUpdateDTO dto) {
+        problemTestCaseService.replaceProblemTestCases(problemId, dto);
+        return Result.ok("测试用例保存成功");
     }
 
     @PostMapping("/problems/{problemId}:publish")

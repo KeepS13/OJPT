@@ -39,6 +39,8 @@ public class ProblemSimpleVO {
 
     private List<TagVO> tags;
 
+    private List<ProblemTestCaseVO> testCases;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;

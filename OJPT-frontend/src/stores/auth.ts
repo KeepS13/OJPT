@@ -1,5 +1,8 @@
 import { defineStore } from 'pinia'
-import type { AuthUser, LoginSuccessPayload } from '@/types/auth'
+import type { AuthUser, AuthUserPayload, LoginSuccessPayload } from '@/types/auth'
+import { normalizeRoles, normalizeRoleType } from '@/utils/role'
+
+type UserProfilePayload = AuthUserPayload
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
@@ -12,21 +15,22 @@ export const useAuthStore = defineStore('auth', {
       this.accessToken = access
       this.refreshToken = refresh
     },
-    setFromLogin(payload: LoginSuccessPayload) {
-      this.accessToken = payload.accessToken
-      this.refreshToken = payload.refreshToken
-      // 将空字符串头像转换为 null，统一处理
+    setUserProfile(payload: UserProfilePayload) {
       const avatarValue = payload.avatar && payload.avatar.trim() ? payload.avatar : null
-      // 确保userId是字符串类型（防止精度丢失）
       const userId = typeof payload.userId === 'number' ? String(payload.userId) : payload.userId
       this.user = {
-        userId: userId,
+        userId,
         username: payload.username,
         email: payload.email,
         avatar: avatarValue,
-        roleType: payload.roleType,
-        roles: payload.roles,
+        roleType: normalizeRoleType(payload.roleType, payload.roles),
+        roles: normalizeRoles(payload.roleType, payload.roles),
       }
+    },
+    setFromLogin(payload: LoginSuccessPayload) {
+      this.accessToken = payload.accessToken
+      this.refreshToken = payload.refreshToken
+      this.setUserProfile(payload)
     },
     clear() {
       this.accessToken = ''

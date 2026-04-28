@@ -1,11 +1,15 @@
 package com.example.ojpt.service;
 
 import com.example.ojpt.common.PageResult;
+import com.example.ojpt.dto.ProblemTestCaseBatchUpdateDTO;
 import com.example.ojpt.dto.ProblemUpdateDTO;
 import com.example.ojpt.vo.AdminProblemListItemVO;
 import com.example.ojpt.vo.ProblemDetailVO;
 import com.example.ojpt.vo.ProblemListItemVO;
 import com.example.ojpt.vo.ProblemSimpleVO;
+import com.example.ojpt.vo.ProblemTestCaseVO;
+
+import java.util.List;
 
 public interface ProblemService {
 
@@ -41,4 +45,8 @@ public interface ProblemService {
     ProblemDetailVO getProblemDetail(Long problemId, Long userId);
 
     ProblemDetailVO getProblemDetailByNo(Integer problemNo, Long userId);
+
+    List<ProblemTestCaseVO> getProblemTestCases(Long problemId);
+
+    void replaceProblemTestCases(Long problemId, ProblemTestCaseBatchUpdateDTO dto);
 }

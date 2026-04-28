@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
-// 使用 hoisted 工厂避免 vi.mock 提前提升导致的未初始化引用问题
 const { getMock, postMock, putMock, deleteMock } = vi.hoisted(() => ({
   getMock: vi.fn(),
   postMock: vi.fn(),
@@ -22,6 +21,8 @@ import {
   updateUserStatus,
   getPlatformStatisticsOverview,
   getUserStatistics,
+  getAdminProblemTestCases,
+  replaceAdminProblemTestCases,
 } from '../../../src/api/admin'
 
 describe('admin api', () => {
@@ -32,7 +33,7 @@ describe('admin api', () => {
     deleteMock.mockReset()
   })
 
-  it('getUserList 应该向 /admin/users 发送 GET 请求并携带查询参数', async () => {
+  it('getUserList should request GET /admin/users with params', async () => {
     const params = { page: 2, size: 20, status: 1 }
     getMock.mockResolvedValue({ data: {} })
 
@@ -42,7 +43,7 @@ describe('admin api', () => {
     expect(getMock).toHaveBeenCalledWith('/admin/users', { params })
   })
 
-  it('updateUserStatus 应该向 /admin/users/{id}/status 发送 PUT 请求', async () => {
+  it('updateUserStatus should request PUT /admin/users/{id}/status', async () => {
     putMock.mockResolvedValue({ data: {} })
     const userId = '123'
     const payload = { status: 0 }
@@ -53,7 +54,7 @@ describe('admin api', () => {
     expect(putMock).toHaveBeenCalledWith(`/admin/users/${userId}/status`, payload)
   })
 
-  it('统计相关接口应调用 /admin/statistics/* 路径', async () => {
+  it('statistics endpoints should request /admin/statistics/*', async () => {
     getMock.mockResolvedValue({ data: {} })
 
     await getPlatformStatisticsOverview()
@@ -61,5 +62,35 @@ describe('admin api', () => {
 
     expect(getMock).toHaveBeenCalledWith('/admin/statistics/overview')
     expect(getMock).toHaveBeenCalledWith('/admin/statistics/users')
+  })
+
+  it('getAdminProblemTestCases should request GET /admin/problems/{id}/test-cases', async () => {
+    getMock.mockResolvedValue({ data: [] })
+
+    await getAdminProblemTestCases('1001')
+
+    expect(getMock).toHaveBeenCalledTimes(1)
+    expect(getMock).toHaveBeenCalledWith('/admin/problems/1001/test-cases')
+  })
+
+  it('replaceAdminProblemTestCases should request PUT /admin/problems/{id}/test-cases', async () => {
+    putMock.mockResolvedValue({ data: undefined })
+    const payload = {
+      cases: [
+        {
+          id: '1',
+          caseType: 'SAMPLE',
+          sortOrder: 1,
+          inputText: '1 2',
+          expectedOutput: '3',
+          explanation: 'basic sample',
+        },
+      ],
+    }
+
+    await replaceAdminProblemTestCases('1001', payload)
+
+    expect(putMock).toHaveBeenCalledTimes(1)
+    expect(putMock).toHaveBeenCalledWith('/admin/problems/1001/test-cases', payload)
   })
 })

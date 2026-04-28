@@ -23,7 +23,6 @@ CREATE TABLE IF NOT EXISTS `problem` (
     KEY `idx_problem_title` (`title`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='题目主表';
 
--- 标签表
 CREATE TABLE IF NOT EXISTS `tag` (
     `id`        BIGINT UNSIGNED NOT NULL COMMENT '主键，雪花 ID',
     `name`      VARCHAR(64)     NOT NULL COMMENT '标签名称',
@@ -34,7 +33,6 @@ CREATE TABLE IF NOT EXISTS `tag` (
     UNIQUE KEY `uk_tag_name` (`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='题目标签';
 
--- 题目-标签 多对多关系
 CREATE TABLE IF NOT EXISTS `problem_tag` (
     `id`         BIGINT UNSIGNED NOT NULL COMMENT '主键，雪花 ID',
     `problem_id` BIGINT UNSIGNED NOT NULL COMMENT '题目 ID',
@@ -46,7 +44,6 @@ CREATE TABLE IF NOT EXISTS `problem_tag` (
     KEY `idx_problem_tag_tag` (`tag_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='题目-标签关联';
 
--- 提交表（判题第一阶段为 stub，仅记录基本信息）
 CREATE TABLE IF NOT EXISTS `submission` (
     `id`          BIGINT UNSIGNED NOT NULL COMMENT '主键，雪花 ID',
     `user_id`     BIGINT UNSIGNED NOT NULL COMMENT '提交用户 ID',
@@ -64,7 +61,6 @@ CREATE TABLE IF NOT EXISTS `submission` (
     KEY `idx_submission_problem` (`problem_id`,`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='提交记录表（stub 阶段）';
 
--- 用户-题目进度表（用于快速查询做题状态）
 CREATE TABLE IF NOT EXISTS `user_problem_progress` (
     `id`               BIGINT UNSIGNED NOT NULL COMMENT '主键，雪花 ID',
     `user_id`          BIGINT UNSIGNED NOT NULL COMMENT '用户 ID',
@@ -77,7 +73,6 @@ CREATE TABLE IF NOT EXISTS `user_problem_progress` (
     KEY `idx_user_problem_status` (`user_id`,`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户-题目进度';
 
--- 基础演示数据：标签
 INSERT INTO `tag` (`id`, `name`, `type`, `created_at`, `updated_at`)
 VALUES
     (2000000000000000001, '数组', 'ALGO', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
@@ -88,7 +83,6 @@ ON DUPLICATE KEY UPDATE
     `type` = VALUES(`type`),
     `updated_at` = CURRENT_TIMESTAMP;
 
--- 基础演示数据：题目（示例：两数之和 等）
 INSERT INTO `problem` (
     `id`, `problem_no`, `title`, `difficulty`, `statement_md`,
     `time_limit_ms`, `memory_limit_kb`, `status`,
@@ -109,7 +103,7 @@ INSERT INTO `problem` (
         0,
         CURRENT_TIMESTAMP,
         CURRENT_TIMESTAMP,
-        1998338632572506116, -- 示例创建人：test_teacher
+        1998338632572506116,
         1998338632572506116
     ),
     (
@@ -135,11 +129,8 @@ ON DUPLICATE KEY UPDATE
     `status` = VALUES(`status`),
     `updated_at` = CURRENT_TIMESTAMP;
 
--- 题目-标签 关联
 INSERT INTO `problem_tag` (`id`, `problem_id`, `tag_id`, `created_at`)
 VALUES
-    (2200000000000000001, 2100000000000000001, 2000000000000000001, CURRENT_TIMESTAMP), -- 两数之和 - 数组
-    (2200000000000000002, 2100000000000000001, 2000000000000000002, CURRENT_TIMESTAMP), -- 两数之和 - 哈希表
-    (2200000000000000003, 2100000000000000002, 2000000000000000003, CURRENT_TIMESTAMP)  -- 两数相加 - 链表
-;
-
+    (2200000000000000001, 2100000000000000001, 2000000000000000001, CURRENT_TIMESTAMP),
+    (2200000000000000002, 2100000000000000001, 2000000000000000002, CURRENT_TIMESTAMP),
+    (2200000000000000003, 2100000000000000002, 2000000000000000003, CURRENT_TIMESTAMP);

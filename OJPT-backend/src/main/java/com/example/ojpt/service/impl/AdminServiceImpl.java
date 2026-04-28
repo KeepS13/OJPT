@@ -27,6 +27,7 @@ import com.example.ojpt.mapper.SchoolMapper;
 import com.example.ojpt.mapper.UserMapper;
 import com.example.ojpt.mapper.UserRoleMapper;
 import com.example.ojpt.security.RefreshTokenStore;
+import com.example.ojpt.security.SystemRoleScope;
 import com.example.ojpt.security.TokenBlacklistService;
 import com.example.ojpt.service.AdminService;
 import com.example.ojpt.service.UserService;
@@ -78,7 +79,7 @@ public class AdminServiceImpl implements AdminService {
             wrapper.eq(User::getStatus, status);
         }
         if (roleType != null) {
-            wrapper.eq(User::getRoleType, roleType);
+            wrapper.eq(User::getRoleType, SystemRoleScope.normalizeRoleType(roleType));
         }
         if (keyword != null && !keyword.isEmpty()) {
             wrapper.and(w -> w.like(User::getUsername, keyword)
@@ -789,6 +790,5 @@ public class AdminServiceImpl implements AdminService {
         return vo;
     }
 }
-
 
 

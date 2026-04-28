@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { setActivePinia, createPinia } from 'pinia'
+import { createPinia, setActivePinia } from 'pinia'
 import { useAuthStore } from '../../../src/stores/auth'
 
 describe('auth store', () => {
@@ -7,7 +7,7 @@ describe('auth store', () => {
     setActivePinia(createPinia())
   })
 
-  it('setTokens 应正确设置 accessToken 与 refreshToken', () => {
+  it('setTokens stores access and refresh tokens', () => {
     const store = useAuthStore()
 
     store.setTokens('access-1', 'refresh-1')
@@ -16,7 +16,7 @@ describe('auth store', () => {
     expect(store.refreshToken).toBe('refresh-1')
   })
 
-  it('setFromLogin 会根据登录响应填充 token 与用户信息，并将空头像视为 null', () => {
+  it('setFromLogin normalizes admin payloads to the admin role only', () => {
     const store = useAuthStore()
 
     store.setFromLogin({
@@ -25,24 +25,41 @@ describe('auth store', () => {
       userId: 1234567890123456,
       username: 'test-user',
       email: 'test@example.com',
-      avatar: '  ', // 空白头像应被视为 null
+      avatar: '  ',
       roleType: 'ADMIN',
-      roles: ['ADMIN'],
+      roles: ['ADMIN', 'USER'],
     })
 
     expect(store.accessToken).toBe('access-2')
     expect(store.refreshToken).toBe('refresh-2')
-
     expect(store.user).not.toBeNull()
     expect(store.user?.username).toBe('test-user')
     expect(store.user?.email).toBe('test@example.com')
     expect(store.user?.avatar).toBeNull()
-    // userId 应被强制转换为字符串以避免大整数精度问题
     expect(store.user?.userId).toBe(String(1234567890123456))
+    expect(store.user?.roleType).toBe('ADMIN')
     expect(store.user?.roles).toEqual(['ADMIN'])
   })
 
-  it('clear 应清空 token 与用户信息', () => {
+  it('setFromLogin collapses legacy non-admin roles to the user role', () => {
+    const store = useAuthStore()
+
+    store.setFromLogin({
+      accessToken: 'access-legacy',
+      refreshToken: 'refresh-legacy',
+      userId: 'legacy-1',
+      username: 'legacy-user',
+      email: 'legacy@example.com',
+      avatar: null,
+      roleType: 'TEACHER',
+      roles: ['USER', 'TEACHER', 'SCHOOL'],
+    })
+
+    expect(store.user?.roleType).toBe('USER')
+    expect(store.user?.roles).toEqual(['USER'])
+  })
+
+  it('clear removes tokens and user state', () => {
     const store = useAuthStore()
     store.setTokens('access-x', 'refresh-x')
     store.user = {
@@ -61,4 +78,3 @@ describe('auth store', () => {
     expect(store.user).toBeNull()
   })
 })
-

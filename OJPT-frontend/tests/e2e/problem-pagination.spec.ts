@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 
 test('题库分页应返回正确的 total/pages/size', async ({ request }) => {
-  const res = await request.get('http://localhost:8080/api/problems?page=1&size=1')
+  const res = await request.get('http://localhost:8111/api/problems?page=1&size=1')
   expect(res.status()).toBe(200)
 
   const body = await res.json()
@@ -20,4 +20,3 @@ test('题库分页应返回正确的 total/pages/size', async ({ request }) => {
     expect(data?.pages).toBeGreaterThanOrEqual(1)
   }
 })
-

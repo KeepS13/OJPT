@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, type Component } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
-import { UserFilled, EditPen, Document, TrendCharts, DataAnalysis, Memo, Lock } from '@element-plus/icons-vue'
+import { UserFilled, Lock, Document } from '@element-plus/icons-vue'
 import UserAvatar from '@/components/common/UserAvatar.vue'
 import { useAuth } from '@/hooks/useAuth'
 
@@ -12,7 +12,7 @@ const displayName = computed(() => {
   return user.value?.username || user.value?.email || ''
 })
 
-type MenuIconName = 'profile' | 'notes' | 'solutions' | 'analysis' | 'progress' | 'resume' | 'security'
+type MenuIconName = 'profile' | 'security' | 'submissions'
 
 interface MenuItem {
   path: string
@@ -23,12 +23,8 @@ interface MenuItem {
 
 const iconMap: Record<MenuIconName, Component> = {
   profile: UserFilled,
-  notes: EditPen,
-  solutions: Document,
-  analysis: TrendCharts,
-  progress: DataAnalysis,
-  resume: Memo,
   security: Lock,
+  submissions: Document,
 }
 
 const getIcon = (name: MenuIconName): Component => {
@@ -37,15 +33,14 @@ const getIcon = (name: MenuIconName): Component => {
 
 const menuItems: MenuItem[] = [
   { path: '/profile', label: '个人资料', iconName: 'profile' },
-  { path: '/profile/notes', label: '个人笔记', iconName: 'notes' },
-  { path: '/profile/solutions', label: '我的题解', iconName: 'solutions' },
-  { path: '/profile/analysis', label: '进展分析', iconName: 'analysis' },
-  { path: '/profile/progress', label: '进度管理', iconName: 'progress' },
-  { path: '/profile/resume', label: '个人简历', iconName: 'resume' },
+  { path: '/profile/submissions', label: '解题记录', iconName: 'submissions' },
   { path: '/profile/security', label: '账号安全', iconName: 'security' },
 ]
 
 const isActive = (path: string) => {
+  if (path === '/profile') {
+    return route.path === path
+  }
   return route.path === path || route.path.startsWith(path + '/')
 }
 </script>
@@ -189,5 +184,3 @@ const isActive = (path: string) => {
   overflow-y: auto;
 }
 </style>
-
-

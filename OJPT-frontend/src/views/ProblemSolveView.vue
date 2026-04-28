@@ -5,9 +5,10 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import LoginDialog from '@/components/auth/LoginDialog.vue'
 import UserAvatar from '@/components/common/UserAvatar.vue'
 import { useAuth } from '@/hooks/useAuth'
-import { getProblemDetailByNo } from '@/api/problem'
+import { getProblemDetailByNo, getProblemSampleTestCases, runProblemCode, submitProblemCode } from '@/api/problem'
 import { renderMarkdown } from '@/utils/markdown'
-import { defaultLanguageTemplates, type SupportedLanguage } from '@/constants/languageTemplates'
+import type { SupportedLanguage } from '@/constants/languageTemplates'
+import { getProblemDefaultTestCases, getProblemTemplate } from '@/utils/problemPresets'
 
 const route = useRoute()
 const router = useRouter()
@@ -49,7 +50,7 @@ const languages: SupportedLanguage[] = ['C/C++', 'Java', 'Python3']
 const activeLanguage = ref<SupportedLanguage>('C/C++')
 
 const resolveTemplate = (lang: SupportedLanguage, problem: ProblemDetailVO | null): string => {
-  return defaultLanguageTemplates[lang]?.template ?? ''
+  return getProblemTemplate(problem, lang)
 }
 
 const code = ref<string>(resolveTemplate(activeLanguage.value, null))
@@ -73,6 +74,131 @@ const resetCodeToDefault = () => {
     if (codeEditorRef.value) codeEditorRef.value.scrollTop = 0
     if (lineNumbersRef.value) lineNumbersRef.value.scrollTop = 0
   })
+}
+
+const isRunning = ref(false)
+const isSubmitting = ref(false)
+const isTiming = ref(false)
+const elapsedSeconds = ref(0)
+let timerHandle: ReturnType<typeof setInterval> | null = null
+
+const formattedElapsed = computed(() => {
+  const minutes = Math.floor(elapsedSeconds.value / 60)
+  const seconds = elapsedSeconds.value % 60
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+})
+
+const stopTimer = () => {
+  if (timerHandle) {
+    clearInterval(timerHandle)
+    timerHandle = null
+  }
+  isTiming.value = false
+}
+
+const handleToggleTimer = () => {
+  if (isTiming.value) {
+    stopTimer()
+    ElMessage.success('计时已停止')
+    return
+  }
+
+  isTiming.value = true
+  timerHandle = setInterval(() => {
+    elapsedSeconds.value += 1
+  }, 1000)
+  ElMessage.success('计时已开始')
+}
+
+const handleRunCode = async () => {
+  if (!isAuthed.value) {
+    showLogin.value = true
+    return
+  }
+
+  if (!code.value.trim()) {
+    ElMessage.warning('请先输入代码')
+    return
+  }
+
+  const cases = visibleTestCases.value.map((item) => ({
+    inputText: item.inputText,
+    expectedOutput: item.outputText,
+  }))
+  if (!cases.length) {
+    ElMessage.warning('请先添加测试用例')
+    return
+  }
+
+  try {
+    isRunning.value = true
+    const result = await runProblemCode({
+      language: activeLanguage.value,
+      sourceCode: code.value,
+      timeLimitMs: problemDetail.value?.timeLimitMs,
+      memoryLimitKb: problemDetail.value?.memoryLimitKb,
+      cases,
+    })
+    const targetCases = activeTestMode.value === 'sample' ? sampleTestCases.value : testCases.value
+    result.data.caseResults.forEach((caseResult) => {
+      const target = targetCases[caseResult.caseIndex]
+      if (!target) return
+      target.outputText = caseResult.actualOutput ?? ''
+      target.status = caseResult.status === 'AC' ? 'success' : 'failed'
+    })
+    const allPassed = result.data.caseResults.every((item) => item.status === 'AC')
+    if (allPassed) {
+      ElMessage.success('运行通过')
+    } else {
+      ElMessage.warning('运行完成，存在未通过用例')
+    }
+  } finally {
+    isRunning.value = false
+  }
+}
+
+const handleSubmitCode = async () => {
+  if (!isAuthed.value) {
+    showLogin.value = true
+    return
+  }
+
+  if (!code.value.trim()) {
+    ElMessage.warning('请先输入代码')
+    return
+  }
+
+  try {
+    isSubmitting.value = true
+    await new Promise((resolve) => window.setTimeout(resolve, 300))
+    ElMessage.success('提交入口已恢复，当前环境未接入判题接口')
+  } finally {
+    isSubmitting.value = false
+  }
+}
+
+const handleSubmitCodeReal = async () => {
+  if (!isAuthed.value) {
+    showLogin.value = true
+    return
+  }
+
+  if (!code.value.trim()) {
+    ElMessage.warning('请输入代码')
+    return
+  }
+
+  try {
+    isSubmitting.value = true
+    const result = await submitProblemCode(Number(routeProblemNo.value), {
+      language: activeLanguage.value,
+      sourceCode: code.value,
+    })
+    ElMessage.success(result.data.message || '代码已提交')
+    await loadProblemDetail()
+  } finally {
+    isSubmitting.value = false
+  }
 }
 
 watch(
@@ -116,10 +242,29 @@ watch(
 const loadProblemDetail = async () => {
   loadingProblem.value = true
   try {
-    const res = await getProblemDetailByNo(String(routeProblemNo.value))
+    const [res, sampleCaseRes] = await Promise.all([
+      getProblemDetailByNo(String(routeProblemNo.value)),
+      getProblemSampleTestCases(String(routeProblemNo.value)),
+    ])
     const body: any = res.data
     const data = body && typeof body === 'object' && 'data' in body ? body.data : body
     problemDetail.value = data as ProblemDetailVO
+    code.value = resolveTemplate(activeLanguage.value, problemDetail.value)
+    sampleTestCases.value = (
+      sampleCaseRes.data?.length ? sampleCaseRes.data : getProblemDefaultTestCases(problemDetail.value)
+    ).map(toTestCase)
+    testCases.value = [
+      {
+        id: 1,
+        name: 'Case 1',
+        inputText: sampleTestCases.value[0]?.inputText || '',
+        outputText: '',
+        status: 'default',
+      },
+    ]
+    activeTestMode.value = sampleTestCases.value.length ? 'sample' : 'custom'
+    activeSampleCaseIndex.value = 0
+    activeCaseIndex.value = 0
   } catch (e) {
     ElMessage.error('加载题目详情失败，请稍后重试')
   } finally {
@@ -130,87 +275,84 @@ const loadProblemDetail = async () => {
 // 测试用例数据结构与状态
 type TestCaseStatus = 'default' | 'success' | 'failed'
 
-interface TestCaseInput {
-  label: string
-  value: string
-}
-
 interface TestCase {
   id: number
   name: string
-  inputs: TestCaseInput[]
+  inputText: string
+  outputText: string
+  explanation?: string | null
   status?: TestCaseStatus
 }
 
-const testCases = ref<TestCase[]>([
-  {
-    id: 1,
-    name: 'Case 1',
-    inputs: [
-      { label: 'nums', value: '[2,7,11,15]' },
-      { label: 'target', value: '9' },
-    ],
-    status: 'default',
+const toTestCase = (
+  item: {
+    name?: string
+    inputText?: string
+    outputText?: string
+    expectedOutput?: string
+    explanation?: string | null
   },
-  {
-    id: 2,
-    name: 'Case 2',
-    inputs: [
-      { label: 'nums', value: '[3,2,4]' },
-      { label: 'target', value: '6' },
-    ],
-    status: 'default',
-  },
-  {
-    id: 3,
-    name: 'Case 3',
-    inputs: [
-      { label: 'nums', value: '[3,3]' },
-      { label: 'target', value: '6' },
-    ],
-    status: 'default',
-  },
-])
+  index: number,
+): TestCase => ({
+  id: index + 1,
+  name: item.name || `Case ${index + 1}`,
+  inputText: item.inputText || '',
+  outputText: item.outputText ?? item.expectedOutput ?? '',
+  explanation: item.explanation ?? null,
+  status: 'default',
+})
 
+const testCases = ref<TestCase[]>(
+  getProblemDefaultTestCases({ problemNo: 1 }).map(toTestCase),
+)
+
+const sampleTestCases = ref<TestCase[]>([])
+const activeTestMode = ref<'sample' | 'custom'>('sample')
+const activeSampleCaseIndex = ref(0)
 const activeCaseIndex = ref(0)
 const hoveredCaseIndex = ref(-1)
 
+const visibleTestCases = computed(() =>
+  activeTestMode.value === 'sample' ? sampleTestCases.value : testCases.value,
+)
+
 const activeTestCase = computed(() => {
-  if (!testCases.value.length) return null
+  if (!visibleTestCases.value.length) return null
+  const currentIndex = activeTestMode.value === 'sample' ? activeSampleCaseIndex.value : activeCaseIndex.value
   const index =
-    activeCaseIndex.value >= 0 && activeCaseIndex.value < testCases.value.length
-      ? activeCaseIndex.value
+    currentIndex >= 0 && currentIndex < visibleTestCases.value.length
+      ? currentIndex
       : 0
-  return testCases.value[index]
+  return visibleTestCases.value[index]
 })
 
 const onSelectTestCase = (index: number) => {
-  if (index < 0 || index >= testCases.value.length) return
+  if (index < 0 || index >= visibleTestCases.value.length) return
+  if (activeTestMode.value === 'sample') {
+    activeSampleCaseIndex.value = index
+    return
+  }
   activeCaseIndex.value = index
 }
 
 const onAddTestCase = () => {
+  if (activeTestMode.value !== 'custom') {
+    activeTestMode.value = 'custom'
+  }
   // 最多 8 个测试用例
   if (testCases.value.length >= 8) return
   const current = activeTestCase.value ?? testCases.value[0]
   const nextId = (testCases.value[testCases.value.length - 1]?.id ?? 0) + 1
   const nextIndex = testCases.value.length
 
-  const baseInputs =
-    current?.inputs?.length
-      ? current.inputs.map((item) => ({
-          label: item.label,
-          value: item.value,
-        }))
-      : [
-          { label: 'nums', value: '[]' },
-          { label: 'target', value: '0' },
-        ]
+  const baseInputText = current?.inputText ?? ''
+  const baseOutputText = current?.outputText ?? ''
 
   testCases.value.push({
     id: nextId,
     name: `Case ${nextIndex + 1}`,
-    inputs: baseInputs,
+    inputText: baseInputText,
+    outputText: baseOutputText,
     status: 'default',
   })
 
@@ -218,6 +360,7 @@ const onAddTestCase = () => {
 }
 
 const onDeleteTestCase = (index: number, event: MouseEvent) => {
+  if (activeTestMode.value !== 'custom') return
   event.stopPropagation()
   if (testCases.value.length <= 1) return
   if (index < 0 || index >= testCases.value.length) return
@@ -240,38 +383,22 @@ const onDeleteTestCase = (index: number, event: MouseEvent) => {
   else if (hoveredCaseIndex.value > index) hoveredCaseIndex.value -= 1
 }
 
-const updateTestCaseInput = (caseIndex: number, inputIndex: number, value: string) => {
+const updateTestCaseInput = (caseIndex: number, value: string) => {
+  if (activeTestMode.value !== 'custom') return
   if (!testCases.value.length) return
   if (caseIndex < 0 || caseIndex >= testCases.value.length) return
   const target = testCases.value[caseIndex]
-  if (!target || !target.inputs?.length) return
-  if (inputIndex < 0 || inputIndex >= target.inputs.length) return
-  const targetInput = target.inputs[inputIndex]
-  if (!targetInput) return
-  targetInput.value = value
+  if (!target) return
+  target.inputText = value
 }
 
-// 图标按钮悬停提示（下拉面板）
-type IconHintKind = 'reset' | null
-const iconHint = ref<IconHintKind>(null)
-let iconHintHideTimeout: number | null = null
-
-const onIconHintEnter = (kind: Exclude<IconHintKind, null>) => {
-  if (iconHintHideTimeout !== null) {
-    window.clearTimeout(iconHintHideTimeout)
-    iconHintHideTimeout = null
-  }
-  iconHint.value = kind
-}
-
-const onIconHintLeave = () => {
-  if (iconHintHideTimeout !== null) {
-    window.clearTimeout(iconHintHideTimeout)
-  }
-  iconHintHideTimeout = window.setTimeout(() => {
-    iconHint.value = null
-    iconHintHideTimeout = null
-  }, 80)
+const updateTestCaseOutput = (caseIndex: number, value: string) => {
+  if (activeTestMode.value !== 'custom') return
+  if (!testCases.value.length) return
+  if (caseIndex < 0 || caseIndex >= testCases.value.length) return
+  const target = testCases.value[caseIndex]
+  if (!target) return
+  target.outputText = value
 }
 
 // 左右面板分隔条（可拖拽调整宽度）
@@ -438,15 +565,12 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   stopResizing()
   stopEditorResizing()
+  stopTimer()
   window.removeEventListener('resize', onWindowResize)
   if (editorResizeObserver && editorPanelRef.value) {
     editorResizeObserver.unobserve(editorPanelRef.value)
     editorResizeObserver.disconnect()
     editorResizeObserver = null
-  }
-  if (iconHintHideTimeout !== null) {
-    window.clearTimeout(iconHintHideTimeout)
-    iconHintHideTimeout = null
   }
 })
 
@@ -569,23 +693,23 @@ const handleLogout = () => {
             <button
               v-if="!isAuthed"
               type="button"
-              class="solve-login-btn"
+              class="login-btn"
               @click="openLogin"
             >
               登录
             </button>
             <div
               v-else
-              class="solve-user"
+              class="nav-user"
               @mouseenter="onUserEnter"
               @mouseleave="onUserLeave"
             >
               <UserAvatar
                 :name="displayName"
-                :size="28"
+                :size="32"
                 :role-type="user?.roleType"
                 :avatar="user?.avatar || null"
-                class="solve-avatar"
+                class="nav-avatar"
               />
               <transition name="fade">
                 <div v-if="showMenu" class="user-menu">
@@ -729,18 +853,56 @@ const handleLogout = () => {
               </select>
             </div>
             <div class="editor-header-right">
-              <div class="icon-hint-wrapper" @mouseenter="onIconHintEnter('reset')" @mouseleave="onIconHintLeave">
+              <button
+                type="button"
+                class="btn-secondary"
+                data-testid="run-code-button"
+                :disabled="isRunning"
+                @click="handleRunCode"
+              >
+                <span class="run-btn-content">
+                  <svg class="run-btn-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M8 6.5v11l9-5.5-9-5.5Z" fill="currentColor" />
+                  </svg>
+                  <span>{{ isRunning ? '运行中...' : '运行' }}</span>
+                </span>
+              </button>
+              <button
+                type="button"
+                class="btn-primary"
+                data-testid="submit-code-button"
+                :disabled="isSubmitting"
+                @click="handleSubmitCodeReal"
+              >
+                {{ isSubmitting ? '提交中...' : '提交' }}
+              </button>
+              <div class="icon-hint-wrapper">
                 <button
                   type="button"
-                  class="btn-secondary btn-icon"
+                  class="btn-icon-refresh"
                   aria-label="还原到默认的代码模版"
+                  title="还原到默认的代码模版"
                   @click="resetCodeToDefault"
                 >
-                  <span class="btn-icon__glyph" aria-hidden="true">↻</span>
+                  <svg class="btn-icon-refresh__glyph" viewBox="0 0 24 24" aria-hidden="true">
+                    <path
+                      d="M20 5v5h-5"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.85"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                    <path
+                      d="M20 10a8 8 0 1 0 2.2 5.5"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.85"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
                 </button>
-                <transition name="fade">
-                  <div v-if="iconHint === 'reset'" class="icon-hint-panel">还原到默认的代码模版</div>
-                </transition>
               </div>
             </div>
           </header>
@@ -778,9 +940,27 @@ const handleLogout = () => {
           <footer class="editor-footer">
             <header class="testcase-header">
               <span class="editor-footer-title">测试用例</span>
+              <div class="testcase-mode-switch">
+                <button
+                  type="button"
+                  class="testcase-mode-btn"
+                  :class="{ 'testcase-mode-btn--active': activeTestMode === 'sample' }"
+                  @click="activeTestMode = 'sample'"
+                >
+                  题目样例
+                </button>
+                <button
+                  type="button"
+                  class="testcase-mode-btn"
+                  :class="{ 'testcase-mode-btn--active': activeTestMode === 'custom' }"
+                  @click="activeTestMode = 'custom'"
+                >
+                  我的测试
+                </button>
+              </div>
               <div class="testcase-tabs">
                 <button
-                  v-for="(item, index) in testCases"
+                  v-for="(item, index) in visibleTestCases"
                   :key="item.id"
                   type="button"
                   class="testcase-tab"
@@ -788,8 +968,8 @@ const handleLogout = () => {
                     'testcase-tab--active': index === activeCaseIndex,
                   }"
                   @click="onSelectTestCase(index)"
-                  @mouseenter="hoveredCaseIndex = index"
-                  @mouseleave="hoveredCaseIndex = -1"
+                  @mouseenter="activeTestMode === 'custom' ? hoveredCaseIndex = index : null"
+                  @mouseleave="activeTestMode === 'custom' ? hoveredCaseIndex = -1 : null"
                 >
                   <span
                     class="testcase-icon"
@@ -800,7 +980,7 @@ const handleLogout = () => {
                   />
                   <span class="testcase-name">Case {{ index + 1 }}</span>
                   <span
-                    v-if="hoveredCaseIndex === index && testCases.length > 1"
+                    v-if="activeTestMode === 'custom' && hoveredCaseIndex === index && testCases.length > 1"
                     class="testcase-delete-btn"
                     role="button"
                     tabindex="0"
@@ -814,7 +994,7 @@ const handleLogout = () => {
                   </span>
                 </button>
                 <button
-                  v-if="testCases.length < 8"
+                  v-if="activeTestMode === 'custom' && testCases.length < 8"
                   type="button"
                   class="testcase-tab testcase-tab--add"
                   @click="onAddTestCase"
@@ -826,25 +1006,37 @@ const handleLogout = () => {
             </header>
             <div
               v-if="
-                testCases.length &&
+                visibleTestCases.length &&
                 activeTestCase &&
                 activeCaseIndex >= 0 &&
-                activeCaseIndex < testCases.length
+                activeCaseIndex < visibleTestCases.length
               "
               class="testcase-body"
             >
-              <div
-                v-for="(input, inputIndex) in activeTestCase.inputs"
-                :key="`${activeTestCase.id}-${input.label}-${inputIndex}`"
-                class="testcase-row"
-              >
-                <span class="testcase-label">{{ input.label }}</span>
-                <input
-                  :value="input.value"
-                  @input="updateTestCaseInput(activeCaseIndex, inputIndex, ($event.target as HTMLInputElement).value)"
-                  class="testcase-input"
+              <div class="testcase-row testcase-row--stacked">
+                <span class="testcase-label">输入</span>
+                <textarea
+                  :value="activeTestCase.inputText"
+                  @input="updateTestCaseInput(activeCaseIndex, ($event.target as HTMLTextAreaElement).value)"
+                  class="testcase-textarea"
                   spellcheck="false"
+                  rows="4"
+                  :readonly="activeTestMode === 'sample'"
                 />
+              </div>
+              <div class="testcase-row testcase-row--stacked">
+                <span class="testcase-label">输出</span>
+                <textarea
+                  :value="activeTestCase.outputText"
+                  @input="updateTestCaseOutput(activeCaseIndex, ($event.target as HTMLTextAreaElement).value)"
+                  class="testcase-textarea"
+                  spellcheck="false"
+                  rows="2"
+                  :readonly="activeTestMode === 'sample'"
+                />
+              </div>
+              <div v-if="activeTestMode === 'sample' && activeTestCase.explanation" class="testcase-explanation">
+                {{ activeTestCase.explanation }}
               </div>
             </div>
             <div v-else class="testcase-empty">
@@ -931,25 +1123,25 @@ const handleLogout = () => {
   align-items: center;
 }
 
-.solve-login-btn {
-  border: 1px solid #e5e7eb;
-  background-color: #ffffff;
+.login-btn {
+  padding: 6px 16px;
   border-radius: 999px;
-  padding: 4px 10px;
-  font-size: 12px;
-  color: #4b5563;
+  border: 1px solid #2563eb;
+  color: #2563eb;
+  font-size: 13px;
+  background-color: #ffffff;
   cursor: pointer;
 }
 
-.solve-login-btn:hover {
-  background-color: #f9fafb;
+.login-btn:hover {
+  background-color: #eff6ff;
 }
 
-.solve-avatar {
+.nav-avatar {
   cursor: pointer;
 }
 
-.solve-user {
+.nav-user {
   position: relative;
 }
 
@@ -999,7 +1191,7 @@ const handleLogout = () => {
 .user-menu {
   position: absolute;
   right: 0;
-  top: 36px;
+  top: 44px;
   width: 220px;
   background: #ffffff;
   border-radius: 10px;
@@ -1288,6 +1480,14 @@ code {
   overflow-x: auto;
 }
 
+:deep(.markdown-body pre code) {
+  background-color: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+  color: inherit;
+}
+
 .editor-header {
   padding: 8px 12px;
   border-bottom: 1px solid #e5e7eb;
@@ -1350,6 +1550,7 @@ code {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .btn-secondary {
@@ -1360,46 +1561,31 @@ code {
   border: 1px solid transparent;
 }
 
-.btn-icon {
-  width: 34px;
-  padding: 5px 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  line-height: 1;
+.btn-primary {
+  border-radius: 999px;
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid #16a34a;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: #ffffff;
+  box-shadow: 0 6px 14px rgba(34, 197, 94, 0.18);
 }
 
-.btn-icon__glyph {
-  display: inline-block;
-  transform: translateY(-0.5px);
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.02);
+}
+
+.btn-primary:disabled,
+.btn-secondary:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .icon-hint-wrapper {
   position: relative;
   display: inline-flex;
-}
-
-.icon-hint-panel {
-  position: absolute;
-  top: -29px;
-  left: -47px;
-  width: 120px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background-color: #ffffff;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
-  z-index: 30;
-  font-size: 12px;
-  color: #374151;
-  line-height: 1;
-  text-align: center;
-}
-
-.editor-header-right .icon-hint-wrapper:nth-child(2) .icon-hint-panel {
-  top: -29px;
-  left: -61px;
-  width: 150px;
 }
 
 .btn-secondary {
@@ -1410,6 +1596,63 @@ code {
 
 .btn-secondary:hover {
   background-color: #e5e7eb;
+}
+
+.run-btn-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.run-btn-icon {
+  width: 13px;
+  height: 13px;
+  display: block;
+}
+
+.btn-icon-refresh {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid #dbe3ee;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  color: #475569;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+  transition:
+    background-color 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease,
+    transform 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.btn-icon-refresh:hover {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #2563eb;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 16px rgba(37, 99, 235, 0.12);
+}
+
+.btn-icon-refresh:active {
+  transform: translateY(0);
+}
+
+.btn-icon-refresh:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 3px rgba(59, 130, 246, 0.16),
+    0 8px 16px rgba(37, 99, 235, 0.12);
+}
+
+.btn-icon-refresh__glyph {
+  width: 16px;
+  height: 16px;
+  display: block;
 }
 
 .editor-body {
@@ -1540,6 +1783,30 @@ code {
   color: #111827;
 }
 
+.testcase-mode-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.testcase-mode-btn {
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  color: #4b5563;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.testcase-mode-btn--active {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #2563eb;
+  font-weight: 600;
+}
+
 .testcase-tabs {
   display: flex;
   align-items: center;
@@ -1653,8 +1920,12 @@ code {
 .testcase-row {
   display: grid;
   grid-template-columns: 60px minmax(0, 1fr);
-  align-items: center;
+  align-items: start;
   gap: 8px;
+}
+
+.testcase-row--stacked {
+  grid-template-columns: 60px minmax(0, 1fr);
 }
 
 .editor-footer > .testcase-tab {
@@ -1685,6 +1956,34 @@ code {
   background-color: #ffffff;
 }
 
+.testcase-textarea {
+  border-radius: 12px;
+  background-color: #f9fafb;
+  border: 1px solid #e5e7eb;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: #111827;
+  width: 100%;
+  min-height: 56px;
+  box-sizing: border-box;
+  outline: none;
+  resize: vertical;
+  line-height: 1.5;
+  font-family: SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+}
+
+.testcase-textarea:focus {
+  border-color: #22c55e;
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.3);
+  background-color: #ffffff;
+}
+
+.testcase-textarea[readonly] {
+  background-color: #f8fafc;
+  color: #475569;
+  cursor: default;
+}
+
 .testcase-value {
   border-radius: 999px;
   background-color: #f9fafb;
@@ -1703,6 +2002,16 @@ code {
 .testcase-empty__accent {
   font-weight: 600;
   color: #16a34a;
+}
+
+.testcase-explanation {
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.7;
+  background: #f8fafc;
+  border: 1px dashed #dbe3ee;
+  border-radius: 10px;
+  padding: 8px 10px;
 }
 
 .fade-enter-active,

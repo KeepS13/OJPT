@@ -8,7 +8,7 @@ const ONLY_SCHOOL_EMAIL = 'only_school@qq.com'
 const ONLY_SCHOOL_USER_ID = '1998338632572506119'
 
 async function loginApi(request: import('@playwright/test').APIRequestContext, account: string) {
-  const res = await request.post('http://localhost:8080/api/auth/login', {
+  const res = await request.post('http://localhost:8111/api/auth/login', {
     headers: { 'Content-Type': 'application/json' },
     data: { account, password: PASSWORD },
   })
@@ -26,7 +26,7 @@ async function blacklistUser(
   durationSeconds: number
 ) {
   const res = await request.post(
-    `http://localhost:8080/api/admin/users/${userId}/blacklist?durationSeconds=${durationSeconds}`,
+    `http://localhost:8111/api/admin/users/${userId}/blacklist?durationSeconds=${durationSeconds}`,
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -43,7 +43,7 @@ async function unblacklistUser(
   accessToken: string,
   userId: string
 ) {
-  const res = await request.delete(`http://localhost:8080/api/admin/users/${userId}/blacklist`, {
+  const res = await request.delete(`http://localhost:8111/api/admin/users/${userId}/blacklist`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
@@ -78,4 +78,3 @@ test('封禁 only_school 后，前端登录应提示封禁剩余时间', async (
     await unblacklistUser(request, adminAccessToken, ONLY_SCHOOL_USER_ID)
   }
 })
-

@@ -1,12 +1,21 @@
-// 登录 / 刷新后返回的用户与 token 信息
+import type { RoleType } from '@/utils/role'
 
 export interface AuthUser {
   userId: string
   username: string
   email: string
   avatar: string | null
-  roleType: string
-  roles: string[]
+  roleType: RoleType
+  roles: RoleType[]
+}
+
+export interface AuthUserPayload {
+  userId: string | number
+  username: string
+  email: string
+  avatar: string | null
+  roleType: RoleType | string
+  roles: Array<RoleType | string>
 }
 
 export interface AuthTokens {
@@ -17,20 +26,10 @@ export interface AuthTokens {
   refreshExpiresIn: number
 }
 
-// 后端 LoginResponseVO 结构
-export type LoginSuccessPayload = AuthUser & AuthTokens
+export type LoginSuccessPayload = AuthUserPayload & AuthTokens
 
-// /auth/me 返回的当前用户信息（不含 token）
-export interface CurrentUser {
-  userId: string
-  username: string
-  email: string
-  avatar: string | null
-  roleType: string
+export interface CurrentUser extends AuthUserPayload {
   status: number
-  roles: string[]
   createdAt: string
   updatedAt: string
 }
-
-

@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import { getCurrentUser } from '@/api/auth'
+import type { RoleType } from '@/utils/role'
 import HomeView from '@/views/HomeView.vue'
 import ProblemSetView from '@/views/ProblemSetView.vue'
 import ProblemSolveView from '@/views/ProblemSolveView.vue'
@@ -9,6 +10,7 @@ import NotFoundView from '@/views/NotFoundView.vue'
 import UserCenterLayout from '@/components/layout/UserCenterLayout.vue'
 import ProfileView from '@/views/ProfileView.vue'
 import SecurityView from '@/views/SecurityView.vue'
+import SubmissionRecordsView from '@/views/SubmissionRecordsView.vue'
 import {
   AdminLayout,
   OverviewTab,
@@ -49,6 +51,11 @@ const router = createRouter({
           path: 'security',
           name: 'security',
           component: SecurityView,
+        },
+        {
+          path: 'submissions',
+          name: 'submission-records',
+          component: SubmissionRecordsView,
         },
       ],
     },
@@ -91,20 +98,20 @@ const router = createRouter({
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
   const requiresAuth = to.meta.requiresAuth
-  const requiredRole = to.meta.requiredRole as string | undefined
+  const requiredRole = to.meta.requiredRole as RoleType | undefined
 
   // 如果有 token 但未加载用户信息，先尝试加载一次
   if (requiresAuth && authStore.accessToken && !authStore.user) {
     try {
       const res = await getCurrentUser()
-      authStore.user = {
+      authStore.setUserProfile({
         userId: typeof res.data.userId === 'number' ? String(res.data.userId) : res.data.userId,
         username: res.data.username,
         email: res.data.email,
         avatar: res.data.avatar && res.data.avatar.trim() ? res.data.avatar : null,
         roleType: res.data.roleType,
         roles: res.data.roles,
-      }
+      })
     } catch {
       authStore.clear()
     }
