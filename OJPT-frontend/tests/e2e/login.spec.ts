@@ -33,7 +33,5 @@ test('输入错误密码时应显示错误提示', async ({ page }) => {
 
   await page.getByTestId('login-submit-button').click()
 
-  // 具体错误文案由后端与全局消息定义，这里只检查出现了“错误”关键字的提示文案
-  await expect(page.getByText(/错误|失败|密码/i)).toBeVisible()
+  await expect(page.getByText('用户名或密码错误')).toBeVisible()
 })
-

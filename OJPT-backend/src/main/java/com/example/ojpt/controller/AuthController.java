@@ -4,11 +4,13 @@ import com.example.ojpt.common.Result;
 import com.example.ojpt.config.JwtProperties;
 import com.example.ojpt.converter.AuthConverter;
 import com.example.ojpt.dto.LoginRequestDTO;
+import com.example.ojpt.dto.PasswordResetRequestDTO;
 import com.example.ojpt.dto.RegisterRequestDTO;
 import com.example.ojpt.entity.User;
 import com.example.ojpt.exception.BusinessException;
 import com.example.ojpt.exception.ErrorCode;
 import com.example.ojpt.service.UserService;
+import com.example.ojpt.service.PasswordResetRequestService;
 import com.example.ojpt.security.JwtService;
 import com.example.ojpt.security.LoginUserDetails;
 import com.example.ojpt.security.RefreshTokenStore;
@@ -48,6 +50,7 @@ public class AuthController {
     private final TokenBlacklistService tokenBlacklistService;
     private final JwtProperties jwtProperties;
     private final UserService userService;
+    private final PasswordResetRequestService passwordResetRequestService;
     private final AuthConverter authConverter;
 
     /**
@@ -58,25 +61,7 @@ public class AuthController {
     @PostMapping("/login")
     @Operation(summary = "用户登录", description = "支持用户名、邮箱或手机号登录")
     public Result<LoginResponseVO> login(@Valid @RequestBody LoginRequestDTO dto) {
-        // 1. 支持“邮箱或手机号”登录：根据输入内容识别登录方式
-        String loginId = dto.getAccount();
-        String principalName;
-
-        if (loginId != null && loginId.contains("@")) {
-            // 按邮箱登录
-            User user = userService.findByEmail(loginId);
-            if (user == null) {
-                throw new BadCredentialsException("用户不存在");
-            }
-            principalName = user.getUsername();
-        } else {
-            // 按手机号登录
-            User user = userService.findByPhone(loginId);
-            if (user == null) {
-                throw new BadCredentialsException("用户不存在");
-            }
-            principalName = user.getUsername();
-        }
+        String principalName = resolvePrincipalName(dto.getAccount());
 
         // 2. 使用 AuthenticationManager 进行身份验证（密码校验等）
         Authentication authentication = authenticationManager.authenticate(
@@ -135,6 +120,23 @@ public class AuthController {
         return Result.ok(vo);
     }
 
+    private String resolvePrincipalName(String account) {
+        String loginId = account == null ? "" : account.trim();
+        User user;
+        if (loginId.contains("@")) {
+            user = userService.findByEmail(loginId.toLowerCase());
+        } else if (loginId.matches("^1[3-9]\\d{9}$")) {
+            user = userService.findByPhone(loginId);
+        } else {
+            user = userService.findByUsername(loginId);
+        }
+
+        if (user == null || user.getUsername() == null || user.getUsername().isBlank()) {
+            throw new BadCredentialsException("Bad credentials");
+        }
+        return user.getUsername();
+    }
+
     @PostMapping("/register")
     @Operation(summary = "用户注册", description = "支持邮箱或手机号注册，注册成功后直接返回登录态")
     public Result<LoginResponseVO> register(@Valid @RequestBody RegisterRequestDTO dto) {
@@ -153,6 +155,13 @@ public class AuthController {
         );
 
         return Result.ok(vo);
+    }
+
+    @PostMapping("/password-reset-requests")
+    @Operation(summary = "提交忘记密码申请", description = "提交用户名或邮箱后通知管理员审批重置密码")
+    public Result<Void> submitPasswordResetRequest(@Valid @RequestBody PasswordResetRequestDTO dto) {
+        passwordResetRequestService.submitRequest(dto.getAccount());
+        return Result.ok("已通知管理员，请等待重置");
     }
 
     @PostMapping("/refresh")

@@ -16,6 +16,10 @@ export interface RegisterPayload {
 
 export type LoginResponse = LoginSuccessPayload
 
+export interface PasswordResetRequestPayload {
+  account: string
+}
+
 export interface RefreshPayload {
   refreshToken: string
 }
@@ -26,6 +30,10 @@ export function login(payload: LoginPayload) {
 
 export function register(payload: RegisterPayload) {
   return request.post<LoginResponse>('/auth/register', payload)
+}
+
+export function requestPasswordReset(payload: PasswordResetRequestPayload) {
+  return request.post<void>('/auth/password-reset-requests', payload)
 }
 
 export function refreshToken(payload: RefreshPayload) {

@@ -1,19 +1,32 @@
 // 管理员相关类型定义
-
 import type { UserDetail } from './user'
 
 // 用户列表查询参数
 export interface UserListParams {
   page?: number
   size?: number
-  status?: number // 0禁用/1启用/2待审核
+  status?: number // 0 禁用 / 1 启用 / 2 待审核
   roleType?: 'USER' | 'ADMIN'
-  keyword?: string // 搜索关键词
+  keyword?: string // 搜索关键字
 }
 
-// 用户状态更新DTO
+// 用户状态更新 DTO
 export interface UserStatusUpdateDTO {
-  status: number // 0禁用/1启用/2待审核
+  status: number // 0 禁用 / 1 启用 / 2 待审核
+}
+
+export type PasswordResetRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
+
+export interface PasswordResetRequestVO {
+  id: string
+  userId: string
+  username?: string | null
+  email?: string | null
+  accountIdentifier: string
+  status: PasswordResetRequestStatus
+  reviewedBy?: string | null
+  reviewedAt?: string | null
+  createdAt?: string | null
 }
 
 // 平台统计概览
@@ -73,6 +86,14 @@ export interface ProblemUpdateDTO {
   statementMd?: string
   timeLimitMs?: number | null
   memoryLimitKb?: number | null
+}
+
+export interface ProblemCreateDTO {
+  title: string
+  difficulty: ProblemDifficulty
+  statementMd: string
+  timeLimitMs: number
+  memoryLimitKb: number
 }
 
 export type ProblemTestCaseType = 'SAMPLE' | 'HIDDEN'

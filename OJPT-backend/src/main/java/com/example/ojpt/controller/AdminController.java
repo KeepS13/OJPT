@@ -2,6 +2,7 @@ package com.example.ojpt.controller;
 
 import com.example.ojpt.common.PageResult;
 import com.example.ojpt.common.Result;
+import com.example.ojpt.dto.ProblemCreateDTO;
 import com.example.ojpt.dto.ProblemTestCaseBatchUpdateDTO;
 import com.example.ojpt.dto.ProblemUpdateDTO;
 import com.example.ojpt.dto.TagCreateDTO;
@@ -10,11 +11,13 @@ import com.example.ojpt.dto.UserUpdateDTO;
 import com.example.ojpt.exception.BusinessException;
 import com.example.ojpt.security.LoginUserDetails;
 import com.example.ojpt.service.AdminService;
+import com.example.ojpt.service.PasswordResetRequestService;
 import com.example.ojpt.service.ProblemService;
 import com.example.ojpt.service.ProblemTestCaseService;
 import com.example.ojpt.service.TagService;
 import com.example.ojpt.service.UserService;
 import com.example.ojpt.vo.AdminProblemListItemVO;
+import com.example.ojpt.vo.PasswordResetRequestVO;
 import com.example.ojpt.vo.ProblemSimpleVO;
 import com.example.ojpt.vo.ProblemTestCaseVO;
 import com.example.ojpt.vo.StatisticsVO;
@@ -48,6 +51,7 @@ import java.util.Map;
 public class AdminController {
 
     private final AdminService adminService;
+    private final PasswordResetRequestService passwordResetRequestService;
     private final UserService userService;
     private final ProblemService problemService;
     private final ProblemTestCaseService problemTestCaseService;
@@ -106,6 +110,27 @@ public class AdminController {
         return Result.ok("状态更新成功");
     }
 
+    @GetMapping("/password-reset-requests")
+    @Operation(summary = "获取密码重置申请")
+    public Result<List<PasswordResetRequestVO>> listPasswordResetRequests(
+            @RequestParam(required = false, defaultValue = "PENDING") String status) {
+        return Result.ok(passwordResetRequestService.listRequests(status));
+    }
+
+    @PostMapping("/password-reset-requests/{requestId}:approve")
+    @Operation(summary = "同意密码重置申请")
+    public Result<Void> approvePasswordResetRequest(@PathVariable Long requestId) {
+        passwordResetRequestService.approveRequest(requestId, getCurrentUserId());
+        return Result.ok("密码已重置为默认密码");
+    }
+
+    @PostMapping("/password-reset-requests/{requestId}:reject")
+    @Operation(summary = "拒绝密码重置申请")
+    public Result<Void> rejectPasswordResetRequest(@PathVariable Long requestId) {
+        passwordResetRequestService.rejectRequest(requestId, getCurrentUserId());
+        return Result.ok("已拒绝重置申请");
+    }
+
     @GetMapping("/problems")
     @Operation(summary = "管理员题目列表")
     public Result<PageResult<AdminProblemListItemVO>> listAdminProblems(
@@ -119,6 +144,12 @@ public class AdminController {
         PageResult<AdminProblemListItemVO> pageResult =
                 problemService.queryAdminProblems(page, size, keyword, difficulty, tagId, status, orderBy);
         return Result.ok(pageResult);
+    }
+
+    @PostMapping("/problems")
+    @Operation(summary = "创建题目草稿")
+    public Result<ProblemSimpleVO> createProblem(@Valid @RequestBody ProblemCreateDTO dto) {
+        return Result.ok(problemService.createDraft(getCurrentUserId(), dto));
     }
 
     @GetMapping("/problems/{problemId}")

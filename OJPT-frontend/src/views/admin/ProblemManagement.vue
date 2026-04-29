@@ -2,9 +2,10 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Search, Refresh, Edit, Upload, Box } from '@element-plus/icons-vue'
+import { Search, Refresh, Edit, Upload, Box, Plus } from '@element-plus/icons-vue'
 import {
   archiveAdminProblem,
+  createAdminProblem,
   getAdminProblemList,
   publishAdminProblem,
 } from '@/api/admin'
@@ -17,6 +18,7 @@ import type {
 const router = useRouter()
 
 const loading = ref(false)
+const creating = ref(false)
 const problems = ref<AdminProblemListItemVO[]>([])
 const total = ref(0)
 
@@ -102,6 +104,33 @@ const goEdit = (row: AdminProblemListItemVO) => {
   router.push(`/admin/problems/${row.id}`)
 }
 
+const createDraft = async () => {
+  if (creating.value) return
+
+  creating.value = true
+  try {
+    const res = await createAdminProblem({
+      title: `未命名题目 ${new Date().toLocaleString('zh-CN', { hour12: false })}`,
+      difficulty: 'EASY',
+      statementMd:
+        '## 题目描述\n\n请在这里填写题目描述。\n\n## 输入\n\n请在这里填写输入格式。\n\n## 输出\n\n请在这里填写输出格式。',
+      timeLimitMs: 1000,
+      memoryLimitKb: 256000,
+    })
+    const id = res.data?.id
+    if (!id) {
+      throw new Error('创建成功但未返回题目 ID')
+    }
+    ElMessage.success('题目草稿已创建')
+    router.push(`/admin/problems/${id}`)
+  } catch (error: unknown) {
+    const err = error as { response?: { data?: { message?: string } }; message?: string }
+    ElMessage.error(err?.response?.data?.message || err?.message || '创建题目失败')
+  } finally {
+    creating.value = false
+  }
+}
+
 const doPublish = async (row: AdminProblemListItemVO) => {
   try {
     loading.value = true
@@ -133,7 +162,7 @@ const doArchive = async (row: AdminProblemListItemVO) => {
 watch(
   () => [params.value.page, params.value.size],
   () => {
-    // 仅在分页参数变化时自动加载，过滤项变化由按钮触发
+    // 仅在分页参数变化时自动加载，过滤项变化由按钮触发。
     loadProblems()
   }
 )
@@ -160,6 +189,15 @@ onMounted(() => {
         </div>
         <div class="right">
           <span class="meta">共 {{ total }} 条</span>
+          <el-button
+            data-testid="create-problem-button"
+            :icon="Plus"
+            type="primary"
+            :loading="creating"
+            @click="createDraft"
+          >
+            新建题目
+          </el-button>
         </div>
       </div>
     </el-card>
@@ -275,7 +313,8 @@ onMounted(() => {
   gap: 12px;
 }
 
-.toolbar .left {
+.toolbar .left,
+.toolbar .right {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -297,4 +336,3 @@ onMounted(() => {
   padding-top: 14px;
 }
 </style>
-

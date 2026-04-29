@@ -3,17 +3,22 @@ import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, Search } from '@element-plus/icons-vue'
 import {
+  approvePasswordResetRequest,
   deleteUser,
+  getPasswordResetRequests,
   getUserDetail,
   getUserList,
+  rejectPasswordResetRequest,
   updateUser,
   updateUserStatus,
 } from '@/api/admin'
 import type { UserUpdateDTO } from '@/api/user'
-import type { UserDetail, UserListParams } from '@/types/admin'
+import type { PasswordResetRequestVO, UserDetail, UserListParams } from '@/types/admin'
 
 const loading = ref(false)
+const resetLoading = ref(false)
 const users = ref<UserDetail[]>([])
+const resetRequests = ref<PasswordResetRequestVO[]>([])
 const totalUsers = ref(0)
 const userParams = ref<UserListParams>({ page: 1, size: 10 })
 
@@ -79,6 +84,19 @@ const loadUsers = async () => {
     ElMessage.error(err?.response?.data?.message || err?.message || '加载用户列表失败')
   } finally {
     loading.value = false
+  }
+}
+
+const loadPasswordResetRequests = async () => {
+  try {
+    resetLoading.value = true
+    const res = await getPasswordResetRequests('PENDING')
+    resetRequests.value = res.data || []
+  } catch (error: unknown) {
+    const err = error as { response?: { data?: { message?: string } }; message?: string }
+    ElMessage.error(err?.response?.data?.message || err?.message || '加载密码重置申请失败')
+  } finally {
+    resetLoading.value = false
   }
 }
 
@@ -172,8 +190,37 @@ const handleUpdateUserStatus = async (userId: string | number, status: number) =
   }
 }
 
+const handleApprovePasswordReset = async (requestId: string | number) => {
+  try {
+    resetLoading.value = true
+    await approvePasswordResetRequest(requestId)
+    ElMessage.success('密码已重置为默认 123456')
+    await loadPasswordResetRequests()
+  } catch (error: unknown) {
+    const err = error as { response?: { data?: { message?: string } }; message?: string }
+    ElMessage.error(err?.response?.data?.message || err?.message || '审批失败')
+  } finally {
+    resetLoading.value = false
+  }
+}
+
+const handleRejectPasswordReset = async (requestId: string | number) => {
+  try {
+    resetLoading.value = true
+    await rejectPasswordResetRequest(requestId)
+    ElMessage.success('已拒绝重置申请')
+    await loadPasswordResetRequests()
+  } catch (error: unknown) {
+    const err = error as { response?: { data?: { message?: string } }; message?: string }
+    ElMessage.error(err?.response?.data?.message || err?.message || '拒绝失败')
+  } finally {
+    resetLoading.value = false
+  }
+}
+
 onMounted(() => {
   loadUsers()
+  loadPasswordResetRequests()
 })
 </script>
 
@@ -234,6 +281,35 @@ onMounted(() => {
     </div>
 
     <div class="table-section">
+      <div class="section-header">
+        <span>密码重置申请</span>
+        <el-button size="small" :loading="resetLoading" @click="loadPasswordResetRequests">
+          <el-icon><Refresh /></el-icon>
+          刷新
+        </el-button>
+      </div>
+      <el-table
+        v-loading="resetLoading"
+        :data="resetRequests"
+        style="width: 100%; margin-bottom: 18px"
+        empty-text="暂无待处理申请"
+      >
+        <el-table-column prop="username" label="用户" width="160" />
+        <el-table-column prop="email" label="邮箱" min-width="220" />
+        <el-table-column prop="accountIdentifier" label="提交账号" min-width="180" />
+        <el-table-column prop="createdAt" label="申请时间" min-width="180" />
+        <el-table-column label="操作" width="180" fixed="right">
+          <template #default="{ row }">
+            <el-button size="small" type="success" @click="handleApprovePasswordReset(row.id)">
+              同意
+            </el-button>
+            <el-button size="small" type="danger" @click="handleRejectPasswordReset(row.id)">
+              拒绝
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+
       <el-table v-loading="loading" :data="users" style="width: 100%">
         <el-table-column prop="username" label="用户名" width="160" />
         <el-table-column prop="email" label="邮箱" min-width="220" />
@@ -496,6 +572,15 @@ onMounted(() => {
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  font-weight: 600;
 }
 
 .action-row {

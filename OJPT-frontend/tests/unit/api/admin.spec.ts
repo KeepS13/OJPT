@@ -21,6 +21,7 @@ import {
   updateUserStatus,
   getPlatformStatisticsOverview,
   getUserStatistics,
+  createAdminProblem,
   getAdminProblemTestCases,
   replaceAdminProblemTestCases,
 } from '../../../src/api/admin'
@@ -62,6 +63,22 @@ describe('admin api', () => {
 
     expect(getMock).toHaveBeenCalledWith('/admin/statistics/overview')
     expect(getMock).toHaveBeenCalledWith('/admin/statistics/users')
+  })
+
+  it('createAdminProblem should request POST /admin/problems for a draft', async () => {
+    postMock.mockResolvedValue({ data: { id: '1001' } })
+    const payload = {
+      title: 'New draft',
+      difficulty: 'EASY' as const,
+      statementMd: '## Statement',
+      timeLimitMs: 1000,
+      memoryLimitKb: 256000,
+    }
+
+    await createAdminProblem(payload)
+
+    expect(postMock).toHaveBeenCalledTimes(1)
+    expect(postMock).toHaveBeenCalledWith('/admin/problems', payload)
   })
 
   it('getAdminProblemTestCases should request GET /admin/problems/{id}/test-cases', async () => {

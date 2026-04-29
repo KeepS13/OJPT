@@ -5,7 +5,7 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 /**
- * 创建题目草稿 DTO（任意登录用户可用）。
+ * DTO for admin-only draft problem creation.
  */
 @Data
 public class ProblemCreateDTO {
@@ -14,7 +14,7 @@ public class ProblemCreateDTO {
     private String title;
 
     /**
-     * 难度：EASY/MEDIUM/HARD
+     * 难度：EASY / MEDIUM / HARD
      */
     @NotBlank(message = "难度不能为空")
     private String difficulty;
@@ -26,15 +26,14 @@ public class ProblemCreateDTO {
     private String statementMd;
 
     /**
-     * 时间限制（毫秒），可选，未填时由后端给默认值。
+     * 时间限制，单位毫秒。
      */
     @NotNull(message = "时间限制不能为空")
     private Integer timeLimitMs;
 
     /**
-     * 内存限制（KB），可选，未填时由后端给默认值。
+     * 内存限制，单位 KB。
      */
     @NotNull(message = "内存限制不能为空")
     private Integer memoryLimitKb;
 }
-

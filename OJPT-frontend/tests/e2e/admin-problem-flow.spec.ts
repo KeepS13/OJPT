@@ -1,7 +1,6 @@
 import { test, expect } from '@playwright/test'
 
 const ADMIN_EMAIL = 'admin@qq.com'
-const USER_EMAIL = 'user@qq.com'
 const PASSWORD = '123456'
 
 async function uiLogin(page: import('@playwright/test').Page, account: string) {
@@ -14,20 +13,20 @@ async function uiLogin(page: import('@playwright/test').Page, account: string) {
 }
 
 test('草稿→管理端发布→学员端可见', async ({ page, request }) => {
-  // 1) 用普通用户 token 创建草稿
+  // 1) 用管理员 token 创建草稿
   const loginRes = await request.post('http://localhost:8111/api/auth/login', {
     headers: { 'Content-Type': 'application/json' },
-    data: { account: USER_EMAIL, password: PASSWORD },
+    data: { account: ADMIN_EMAIL, password: PASSWORD },
   })
   expect(loginRes.status()).toBe(200)
   const loginBody = await loginRes.json()
-  const userAccessToken = loginBody?.data?.accessToken as string
-  expect(userAccessToken).toBeTruthy()
+  const adminAccessToken = loginBody?.data?.accessToken as string
+  expect(adminAccessToken).toBeTruthy()
 
   const title = `e2e-draft-${Date.now()}`
-  const createRes = await request.post('http://localhost:8111/api/problems', {
+  const createRes = await request.post('http://localhost:8111/api/admin/problems', {
     headers: {
-      Authorization: `Bearer ${userAccessToken}`,
+      Authorization: `Bearer ${adminAccessToken}`,
       'Content-Type': 'application/json',
     },
     data: {

@@ -760,8 +760,10 @@ describe('ProblemSolveView actions', () => {
 
     expect(wrapper.text()).toContain('答案错误')
     expect(wrapper.text()).toContain('1 / 3')
-    expect(wrapper.text()).toContain('wrong output')
-    expect(wrapper.text()).toContain('2 3')
+    expect(wrapper.text()).not.toContain('wrong output')
+    expect(wrapper.text()).not.toContain('输入2 3')
+    expect(wrapper.text()).not.toContain('期望输出5')
+    expect(wrapper.text()).not.toContain('实际输出4')
     expect(wrapper.findAll('[data-testid="submit-case-result"]')).toHaveLength(1)
     expect(wrapper.text()).not.toContain('公开样例 1')
 

@@ -136,6 +136,7 @@
 - `PUT /api/admin/users/{userId}`
 - `DELETE /api/admin/users/{userId}`
 - `PUT /api/admin/users/{userId}/status`
+- `POST /api/admin/problems`
 - `GET /api/admin/problems`
 - `GET /api/admin/problems/{problemId}`
 - `PUT /api/admin/problems/{problemId}`

@@ -815,9 +815,21 @@ const submitTotalCaseCount = computed(() =>
   submitResult.value?.totalCaseCount ?? submitResult.value?.caseResults?.length ?? 0,
 )
 
-const submitFailedCase = computed(() =>
-  submitResult.value?.caseResults?.find((item) => item.status !== 'AC') ?? null,
-)
+const redactHiddenCaseResult = (item: ProblemCodeRunCaseResult): ProblemCodeRunCaseResult => {
+  if (item.caseType !== 'HIDDEN') return item
+  return {
+    ...item,
+    inputText: null,
+    expectedOutput: null,
+    actualOutput: null,
+    errorOutput: null,
+  }
+}
+
+const submitFailedCase = computed(() => {
+  const failed = submitResult.value?.caseResults?.find((item) => item.status !== 'AC') ?? null
+  return failed ? redactHiddenCaseResult(failed) : null
+})
 
 const submitTimeBuckets = computed(() =>
   submitResult.value?.rankStats?.timeBuckets ?? [],

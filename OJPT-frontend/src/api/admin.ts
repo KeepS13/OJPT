@@ -4,10 +4,13 @@ import type {
   UserDetail,
   UserListParams,
   UserStatusUpdateDTO,
+  PasswordResetRequestStatus,
+  PasswordResetRequestVO,
   PlatformStatisticsOverview,
   UserStatistics,
   AdminProblemListItemVO,
   AdminProblemListParams,
+  ProblemCreateDTO,
   ProblemUpdateDTO,
   TagVO,
   ProblemTestCaseVO,
@@ -30,14 +33,24 @@ export function updateUser(userId: string | number, payload: UserUpdateDTO) {
   return request.put<void>(`/admin/users/${userId}`, payload)
 }
 
-// 删除用户（软删除）
 export function deleteUser(userId: string | number) {
   return request.delete<void>(`/admin/users/${userId}`)
 }
 
-// 修改用户状态
 export function updateUserStatus(userId: string | number, payload: UserStatusUpdateDTO) {
   return request.put<void>(`/admin/users/${userId}/status`, payload)
+}
+
+export function getPasswordResetRequests(status: PasswordResetRequestStatus = 'PENDING') {
+  return request.get<PasswordResetRequestVO[]>('/admin/password-reset-requests', { params: { status } })
+}
+
+export function approvePasswordResetRequest(requestId: string | number) {
+  return request.post<void>(`/admin/password-reset-requests/${requestId}:approve`)
+}
+
+export function rejectPasswordResetRequest(requestId: string | number) {
+  return request.post<void>(`/admin/password-reset-requests/${requestId}:reject`)
 }
 
 // 获取平台整体数据概览
@@ -58,6 +71,10 @@ export function getAdminProblemList(params?: AdminProblemListParams) {
 
 export function getAdminProblemDetail(problemId: string) {
   return request.get<unknown>(`/admin/problems/${problemId}`)
+}
+
+export function createAdminProblem(payload: ProblemCreateDTO) {
+  return request.post<{ id: string }>('/admin/problems', payload)
 }
 
 export function getAdminProblemTestCases(problemId: string) {

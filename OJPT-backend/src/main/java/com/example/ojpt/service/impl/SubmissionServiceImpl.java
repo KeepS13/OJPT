@@ -240,8 +240,8 @@ public class SubmissionServiceImpl implements SubmissionService {
             );
 
             CodeRunCaseResultVO caseResult = toSubmissionCaseResult(problem, i, judgeCase, executionResult);
-            caseResults.add(caseResult);
             persistCaseResult(submission.getId(), caseResult);
+            caseResults.add(sanitizeCaseResultForResponse(caseResult));
 
             if (caseResult.getTimeMs() != null) {
                 maxTimeMs = Math.max(maxTimeMs, caseResult.getTimeMs().intValue());
@@ -352,6 +352,23 @@ public class SubmissionServiceImpl implements SubmissionService {
                 .setStatus(caseResult.getStatus())
                 .setTimeMs(caseResult.getTimeMs() == null ? null : caseResult.getTimeMs().intValue())
                 .setMessage(caseResult.getMessage()));
+    }
+
+    private CodeRunCaseResultVO sanitizeCaseResultForResponse(CodeRunCaseResultVO caseResult) {
+        if (!CASE_TYPE_HIDDEN.equals(caseResult.getCaseType())) {
+            return caseResult;
+        }
+        return new CodeRunCaseResultVO(
+                caseResult.getCaseIndex(),
+                caseResult.getCaseType(),
+                caseResult.getStatus(),
+                null,
+                null,
+                null,
+                null,
+                caseResult.getTimeMs(),
+                caseResult.getMessage()
+        );
     }
 
     private Integer calculateAcRank(Long problemId, Integer timeMs) {

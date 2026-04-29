@@ -3,7 +3,6 @@ package com.example.ojpt.controller;
 import com.example.ojpt.common.PageResult;
 import com.example.ojpt.common.Result;
 import com.example.ojpt.dto.CodeRunDTO;
-import com.example.ojpt.dto.ProblemCreateDTO;
 import com.example.ojpt.dto.ProblemCodeDraftSaveDTO;
 import com.example.ojpt.dto.SubmissionCreateDTO;
 import com.example.ojpt.security.LoginUserDetails;
@@ -14,7 +13,6 @@ import com.example.ojpt.service.SubmissionService;
 import com.example.ojpt.vo.ProblemCodeDraftVO;
 import com.example.ojpt.vo.ProblemDetailVO;
 import com.example.ojpt.vo.ProblemListItemVO;
-import com.example.ojpt.vo.ProblemSimpleVO;
 import com.example.ojpt.vo.ProblemTestCaseVO;
 import com.example.ojpt.vo.CodeRunResultVO;
 import com.example.ojpt.vo.SubmissionCreateResultVO;
@@ -65,16 +63,6 @@ public class ProblemController {
     @Operation(summary = "题目详情")
     public Result<ProblemDetailVO> getProblemDetail(@PathVariable("id") Long problemId) {
         return Result.ok(problemService.getProblemDetail(problemId, getCurrentUserId()));
-    }
-
-    @PostMapping
-    @Operation(summary = "创建题目草稿")
-    public Result<ProblemSimpleVO> createProblemDraft(@Valid @RequestBody ProblemCreateDTO dto) {
-        Long userId = getCurrentUserId();
-        if (userId == null) {
-            throw com.example.ojpt.exception.BusinessException.unauthorized("未登录");
-        }
-        return Result.ok(problemService.createDraft(userId, dto));
     }
 
     @GetMapping("/no/{problemNo}")

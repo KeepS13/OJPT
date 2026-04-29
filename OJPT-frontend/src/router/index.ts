@@ -3,21 +3,20 @@ import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import { getCurrentUser } from '@/api/auth'
 import type { RoleType } from '@/utils/role'
-import HomeView from '@/views/HomeView.vue'
-import ProblemSetView from '@/views/ProblemSetView.vue'
-import ProblemSolveView from '@/views/ProblemSolveView.vue'
-import NotFoundView from '@/views/NotFoundView.vue'
-import UserCenterLayout from '@/components/layout/UserCenterLayout.vue'
-import ProfileView from '@/views/ProfileView.vue'
-import SecurityView from '@/views/SecurityView.vue'
-import SubmissionRecordsView from '@/views/SubmissionRecordsView.vue'
-import {
-  AdminLayout,
-  OverviewTab,
-  UserManagement,
-  ProblemManagement,
-  ProblemEdit,
-} from '@/views/admin'
+
+const HomeView = () => import('@/views/HomeView.vue')
+const ProblemSetView = () => import('@/views/ProblemSetView.vue')
+const ProblemSolveView = () => import('@/views/ProblemSolveView.vue')
+const NotFoundView = () => import('@/views/NotFoundView.vue')
+const UserCenterLayout = () => import('@/components/layout/UserCenterLayout.vue')
+const ProfileView = () => import('@/views/ProfileView.vue')
+const SecurityView = () => import('@/views/SecurityView.vue')
+const SubmissionRecordsView = () => import('@/views/SubmissionRecordsView.vue')
+const AdminLayout = () => import('@/views/admin/AdminLayout.vue')
+const OverviewTab = () => import('@/views/admin/OverviewTab.vue')
+const UserManagement = () => import('@/views/admin/UserManagement.vue')
+const ProblemManagement = () => import('@/views/admin/ProblemManagement.vue')
+const ProblemEdit = () => import('@/views/admin/ProblemEdit.vue')
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),

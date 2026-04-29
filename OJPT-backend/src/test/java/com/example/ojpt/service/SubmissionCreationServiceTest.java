@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
@@ -196,7 +197,11 @@ class SubmissionCreationServiceTest {
         assertEquals(null, result.getRank());
         assertEquals(1, result.getCaseResults().size());
         assertEquals("WA", result.getCaseResults().get(0).getStatus());
-        assertEquals("0 2", result.getCaseResults().get(0).getActualOutput());
+        assertEquals("HIDDEN", result.getCaseResults().get(0).getCaseType());
+        assertNull(result.getCaseResults().get(0).getInputText());
+        assertNull(result.getCaseResults().get(0).getExpectedOutput());
+        assertNull(result.getCaseResults().get(0).getActualOutput());
+        assertNull(result.getCaseResults().get(0).getErrorOutput());
         assertEquals("ATTEMPTED", progress.getStatus());
         assertEquals(2300000000000000010L, progress.getLastSubmissionId());
         verify(progressMapper).updateById(progress);

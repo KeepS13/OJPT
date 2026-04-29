@@ -3,7 +3,7 @@ import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Form as VForm, Field, ErrorMessage } from 'vee-validate'
 import * as yup from 'yup'
-import { login, register } from '@/api/auth'
+import { login, register, requestPasswordReset } from '@/api/auth'
 import { useAuth } from '@/hooks/useAuth'
 
 interface LoginForm {
@@ -30,6 +30,9 @@ const emit = defineEmits<{
 
 const auth = useAuth()
 const loading = ref(false)
+const resetLoading = ref(false)
+const showResetDialog = ref(false)
+const resetAccount = ref('')
 const authMode = ref<AuthMode>('login')
 const activeTab = ref<LoginTab>('email')
 const autoLoggingIn = computed(() => auth.authInitializing && !auth.isAuthed)
@@ -158,6 +161,30 @@ const onSubmit = async (values: AuthForm, setFieldValue?: (field: string, value:
     ElMessage.error(getErrorMessage(error))
   } finally {
     loading.value = false
+  }
+}
+
+const openResetDialog = () => {
+  resetAccount.value = accountInput.value.trim()
+  showResetDialog.value = true
+}
+
+const submitPasswordReset = async () => {
+  const account = resetAccount.value.trim()
+  if (!account) {
+    ElMessage.warning('请输入用户名、邮箱或手机号')
+    return
+  }
+
+  resetLoading.value = true
+  try {
+    await requestPasswordReset({ account })
+    ElMessage.success('已通知管理员，请等待重置')
+    showResetDialog.value = false
+  } catch (error: unknown) {
+    ElMessage.error(getErrorMessage(error))
+  } finally {
+    resetLoading.value = false
   }
 }
 
@@ -504,7 +531,7 @@ watch(
             >
               已有账号？登录
             </a>
-            <a v-if="!isRegister" href="javascript:void(0)">忘记密码</a>
+            <a v-if="!isRegister" href="javascript:void(0)" @click="openResetDialog">忘记密码</a>
           </div>
         </el-form>
       </VForm>
@@ -516,6 +543,31 @@ watch(
         <a href="javascript:void(0)">《隐私协议》</a>
       </p>
     </div>
+  </el-dialog>
+
+  <el-dialog v-model="showResetDialog" title="忘记密码" width="420px">
+    <el-form label-position="top" @submit.prevent="submitPasswordReset">
+      <el-form-item label="用户名、邮箱或手机号">
+        <el-input
+          v-model="resetAccount"
+          data-testid="password-reset-account-input"
+          placeholder="请输入用户名、邮箱或手机号"
+          clearable
+          @keyup.enter="submitPasswordReset"
+        />
+      </el-form-item>
+    </el-form>
+    <template #footer>
+      <el-button @click="showResetDialog = false">取消</el-button>
+      <el-button
+        type="primary"
+        :loading="resetLoading"
+        data-testid="password-reset-submit-button"
+        @click="submitPasswordReset"
+      >
+        提交
+      </el-button>
+    </template>
   </el-dialog>
 </template>
 

@@ -93,8 +93,8 @@ export interface ProblemCodeRunCaseResult {
   caseIndex: number
   caseType?: 'SAMPLE' | 'HIDDEN' | 'CUSTOM' | string
   status: string
-  inputText: string
-  expectedOutput: string
+  inputText?: string | null
+  expectedOutput?: string | null
   actualOutput?: string | null
   errorOutput?: string | null
   timeMs?: number | null
