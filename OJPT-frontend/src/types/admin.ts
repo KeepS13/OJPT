@@ -1,18 +1,15 @@
-// 管理员相关类型定义
 import type { UserDetail } from './user'
 
-// 用户列表查询参数
 export interface UserListParams {
   page?: number
   size?: number
-  status?: number // 0 禁用 / 1 启用 / 2 待审核
+  status?: number
   roleType?: 'USER' | 'ADMIN'
-  keyword?: string // 搜索关键字
+  keyword?: string
 }
 
-// 用户状态更新 DTO
 export interface UserStatusUpdateDTO {
-  status: number // 0 禁用 / 1 启用 / 2 待审核
+  status: number
 }
 
 export type PasswordResetRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
@@ -29,7 +26,6 @@ export interface PasswordResetRequestVO {
   createdAt?: string | null
 }
 
-// 平台统计概览
 export interface PlatformStatisticsOverview {
   totalCount: number
   statusCount: {
@@ -37,15 +33,25 @@ export interface PlatformStatisticsOverview {
   }
 }
 
-// 用户数据统计
 export interface UserStatistics {
   totalCount: number
-  statusCount: {
-    [key: string]: number // "0", "1", "2"
-  }
+  statusCount: Record<string, number>
 }
 
-// ========== 题库管理（Admin Problems）==========
+export type JudgeEnvironmentCheckStatus = 'UP' | 'DOWN' | 'SKIPPED'
+
+export interface JudgeEnvironmentCheckDTO {
+  name: string
+  status: JudgeEnvironmentCheckStatus
+  target: string
+  message: string
+}
+
+export interface JudgeEnvironmentHealthDTO {
+  status: JudgeEnvironmentCheckStatus
+  message: string
+  checks: JudgeEnvironmentCheckDTO[]
+}
 
 export type ProblemDifficulty = 'EASY' | 'MEDIUM' | 'HARD'
 export type ProblemPublishStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED'
@@ -53,6 +59,16 @@ export type ProblemPublishStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED'
 export interface TagVO {
   id: string
   name: string
+  type?: string | null
+}
+
+export interface TagCreateDTO {
+  name: string
+  type?: string
+}
+
+export interface TagUpdateDTO {
+  name?: string
   type?: string
 }
 

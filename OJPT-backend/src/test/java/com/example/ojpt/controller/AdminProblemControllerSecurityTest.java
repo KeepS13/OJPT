@@ -2,6 +2,7 @@ package com.example.ojpt.controller;
 
 import com.example.ojpt.dto.JudgeEnvironmentHealthDTO;
 import com.example.ojpt.dto.ProblemCreateDTO;
+import com.example.ojpt.common.PageResult;
 import com.example.ojpt.exception.GlobalExceptionHandler;
 import com.example.ojpt.judge.JudgeEnvironmentHealthService;
 import com.example.ojpt.security.JwtAuthenticationFilter;
@@ -13,6 +14,7 @@ import com.example.ojpt.service.ProblemService;
 import com.example.ojpt.service.ProblemTestCaseService;
 import com.example.ojpt.service.TagService;
 import com.example.ojpt.service.UserService;
+import com.example.ojpt.vo.PasswordResetRequestVO;
 import com.example.ojpt.vo.ProblemSimpleVO;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.jsonwebtoken.Claims;
@@ -75,11 +77,17 @@ class AdminProblemControllerSecurityTest {
     @Autowired
     private ProblemService problemService;
 
+    @Autowired
+    private AdminService adminService;
+
+    @Autowired
+    private PasswordResetRequestService passwordResetRequestService;
+
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        Mockito.reset(jwtService, tokenBlacklistService, problemService);
+        Mockito.reset(jwtService, tokenBlacklistService, problemService, adminService, passwordResetRequestService);
         when(tokenBlacklistService.isUserBlacklisted(any())).thenReturn(false);
         when(tokenBlacklistService.isPermissionChangeBlacklisted(any())).thenReturn(false);
         when(tokenBlacklistService.isBlacklisted(any())).thenReturn(false);
@@ -140,6 +148,38 @@ class AdminProblemControllerSecurityTest {
         mockMvc.perform(get("/api/admin/judge-environment/health")
                         .header("Authorization", "Bearer user-token"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void listUsers_bindsExplicitRequestParamNames() throws Exception {
+        when(jwtService.parseToken("admin-token")).thenReturn(accessClaims(1L, List.of("ADMIN")));
+        when(adminService.getUsers(2, 20, 1, "ADMIN", "alice")).thenReturn(PageResult.empty(2, 20));
+
+        mockMvc.perform(get("/api/admin/users")
+                        .header("Authorization", "Bearer admin-token")
+                        .param("page", "2")
+                        .param("size", "20")
+                        .param("status", "1")
+                        .param("roleType", "ADMIN")
+                        .param("keyword", "alice"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+
+        verify(adminService).getUsers(2, 20, 1, "ADMIN", "alice");
+    }
+
+    @Test
+    void listPasswordResetRequests_bindsExplicitRequestParamName() throws Exception {
+        when(jwtService.parseToken("admin-token")).thenReturn(accessClaims(1L, List.of("ADMIN")));
+        when(passwordResetRequestService.listRequests("PENDING")).thenReturn(List.of(new PasswordResetRequestVO()));
+
+        mockMvc.perform(get("/api/admin/password-reset-requests")
+                        .header("Authorization", "Bearer admin-token")
+                        .param("status", "PENDING"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+
+        verify(passwordResetRequestService).listRequests("PENDING");
     }
 
     private Claims accessClaims(Long userId, List<String> roles) {

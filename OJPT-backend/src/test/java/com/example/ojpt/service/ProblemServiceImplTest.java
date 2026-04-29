@@ -120,6 +120,7 @@ class ProblemServiceImplTest {
         page.setPages(1);
 
         when(problemMapper.selectPage(any(Page.class), any())).thenReturn(page);
+        when(problemMapper.selectList(any())).thenReturn(List.of(solved, unsolved));
         when(problemTagMapper.selectList(any())).thenReturn(List.of());
         when(userProblemProgressMapper.selectList(any())).thenReturn(List.of(
                 new UserProblemProgress()
@@ -132,6 +133,72 @@ class ProblemServiceImplTest {
 
         assertEquals(1, result.getRecords().size());
         assertEquals(2002L, result.getRecords().get(0).getId());
+        assertEquals("UNSOLVED", result.getRecords().get(0).getStatus());
+    }
+
+    @Test
+    void queryProblems_appliesUserStatusFilterBeforePagination() {
+        ProblemMapper problemMapper = mock(ProblemMapper.class);
+        ProblemTestCaseMapper problemTestCaseMapper = mock(ProblemTestCaseMapper.class);
+        TagMapper tagMapper = mock(TagMapper.class);
+        ProblemTagMapper problemTagMapper = mock(ProblemTagMapper.class);
+        UserProblemProgressMapper userProblemProgressMapper = mock(UserProblemProgressMapper.class);
+        ProblemService service = new ProblemServiceImpl(
+                problemMapper,
+                problemTestCaseMapper,
+                tagMapper,
+                problemTagMapper,
+                userProblemProgressMapper
+        );
+
+        Problem solved = new Problem()
+                .setId(2001L)
+                .setProblemNo(1)
+                .setTitle("Solved problem")
+                .setDifficulty("EASY")
+                .setSubmitCount(10L)
+                .setAcceptedCount(8L);
+        Problem attempted = new Problem()
+                .setId(2002L)
+                .setProblemNo(2)
+                .setTitle("Attempted problem")
+                .setDifficulty("MEDIUM")
+                .setSubmitCount(5L)
+                .setAcceptedCount(1L);
+        Problem unsolved = new Problem()
+                .setId(2003L)
+                .setProblemNo(3)
+                .setTitle("Unsolved problem")
+                .setDifficulty("HARD")
+                .setSubmitCount(0L)
+                .setAcceptedCount(0L);
+
+        Page<Problem> firstPage = new Page<>(1, 1);
+        firstPage.setRecords(List.of(solved));
+        firstPage.setTotal(3);
+        firstPage.setCurrent(1);
+        firstPage.setSize(1);
+        firstPage.setPages(3);
+
+        when(problemMapper.selectPage(any(Page.class), any())).thenReturn(firstPage);
+        when(problemMapper.selectList(any())).thenReturn(List.of(solved, attempted, unsolved));
+        when(problemTagMapper.selectList(any())).thenReturn(List.of());
+        when(userProblemProgressMapper.selectList(any())).thenReturn(List.of(
+                new UserProblemProgress()
+                        .setUserId(1001L)
+                        .setProblemId(2001L)
+                        .setStatus("SOLVED"),
+                new UserProblemProgress()
+                        .setUserId(1001L)
+                        .setProblemId(2002L)
+                        .setStatus("ATTEMPTED")
+        ));
+
+        var result = service.queryProblems(1001L, 1, 1, null, null, null, "UNSOLVED", null);
+
+        assertEquals(1, result.getTotal());
+        assertEquals(1, result.getRecords().size());
+        assertEquals(2003L, result.getRecords().get(0).getId());
         assertEquals("UNSOLVED", result.getRecords().get(0).getStatus());
     }
 }

@@ -47,7 +47,7 @@ const features = [
   <section class="home-workbench">
     <div class="workbench-hero">
       <div class="hero-main">
-        <div class="hero-label">OJPT Training</div>
+        <div class="hero-label">OJPT 训练</div>
         <h1>OJPT 训练工作台</h1>
         <p class="hero-subtitle">
           从题库进入作答，保存草稿，提交后查看排名和耗时分布。

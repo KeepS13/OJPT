@@ -113,6 +113,16 @@ public class ProblemController {
         return Result.ok(submissionService.createSubmission(userId, problemNo, dto));
     }
 
+    @GetMapping("/submissions/{submissionId}")
+    @Operation(summary = "鏌ヨ鎻愪氦缁撴灉", description = "鏍规嵁 submissionId 鏌ヨ褰撳墠鐢ㄦ埛鐨勬彁浜ょ姸鎬佷笌鍒ら缁撴灉")
+    public Result<SubmissionCreateResultVO> getSubmissionResult(@PathVariable("submissionId") Long submissionId) {
+        Long userId = getCurrentUserId();
+        if (userId == null) {
+            throw com.example.ojpt.exception.BusinessException.unauthorized("鏈櫥褰?");
+        }
+        return Result.ok(submissionService.getSubmissionResult(userId, submissionId));
+    }
+
     @PostMapping("/run")
     @Operation(summary = "运行代码", description = "使用页面传入的公开样例或自定义用例同步运行代码")
     public Result<CodeRunResultVO> runCode(@Valid @RequestBody CodeRunDTO dto) {

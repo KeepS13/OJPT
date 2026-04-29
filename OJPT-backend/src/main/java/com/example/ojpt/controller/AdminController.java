@@ -60,11 +60,11 @@ public class AdminController {
     @GetMapping("/users")
     @Operation(summary = "获取用户列表")
     public Result<PageResult<UserDetailVO>> getUsers(
-            @RequestParam(required = false, defaultValue = "1") Integer page,
-            @RequestParam(required = false, defaultValue = "10") Integer size,
-            @RequestParam(required = false) Integer status,
-            @RequestParam(required = false) String roleType,
-            @RequestParam(required = false) String keyword) {
+            @RequestParam(value = "page", required = false, defaultValue = "1") Integer page,
+            @RequestParam(value = "size", required = false, defaultValue = "10") Integer size,
+            @RequestParam(value = "status", required = false) Integer status,
+            @RequestParam(value = "roleType", required = false) String roleType,
+            @RequestParam(value = "keyword", required = false) String keyword) {
         PageResult<UserDetailVO> users = adminService.getUsers(page, size, status, roleType, keyword);
         return Result.ok(users);
     }
@@ -113,7 +113,7 @@ public class AdminController {
     @GetMapping("/password-reset-requests")
     @Operation(summary = "获取密码重置申请")
     public Result<List<PasswordResetRequestVO>> listPasswordResetRequests(
-            @RequestParam(required = false, defaultValue = "PENDING") String status) {
+            @RequestParam(value = "status", required = false, defaultValue = "PENDING") String status) {
         return Result.ok(passwordResetRequestService.listRequests(status));
     }
 

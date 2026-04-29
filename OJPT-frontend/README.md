@@ -40,6 +40,22 @@
 - Vitest
 - Playwright
 
+## 推荐启动方式
+
+默认通过根目录 `docker-compose.yml` 使用 Nginx 承载前端构建产物：
+
+```bash
+cp .env.example .env
+docker compose up --build -d frontend
+```
+
+默认入口：`http://localhost`
+
+说明：
+
+- 当前前端头像组件会把相对头像地址拼成 `http://localhost/uploads/...`
+- 因此 compose 默认把 Nginx 暴露在 `80` 端口；如果修改 `FRONTEND_PORT`，头像资源地址也需要同步处理
+
 ## 本地开发
 
 ```bash
@@ -50,11 +66,23 @@ npm run dev
 
 默认地址：`http://localhost:8110`
 
+Vite dev server 当前会：
+
+- 监听 `127.0.0.1:8110`
+- 将 `/api` 代理到 `http://127.0.0.1:8111`
+
+## 构建说明
+
+仓库内 `vite.config.ts` 的默认 `build.outDir` 面向某个本机 Nginx 目录，不适合作为通用文档步骤。可复现构建请使用以下两种方式之一：
+
+- 直接使用根目录 `docker compose`，由 `OJPT-deploy/docker/frontend.Dockerfile` 在容器内执行构建
+- 本地手动构建时显式覆盖输出目录：`npm run build -- --outDir ./dist`
+
 ## 常用命令
 
 ```bash
 npm run dev
-npm run build
+npm run build -- --outDir ./dist
 npm run preview
 npm run type-check
 npm run lint

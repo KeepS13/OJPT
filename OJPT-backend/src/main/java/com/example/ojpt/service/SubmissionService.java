@@ -10,6 +10,8 @@ import com.example.ojpt.vo.UserSubmissionRecordVO;
 public interface SubmissionService {
     SubmissionCreateResultVO createSubmission(Long userId, Integer problemNo, SubmissionCreateDTO dto);
 
+    SubmissionCreateResultVO getSubmissionResult(Long userId, Long submissionId);
+
     CodeRunResultVO runCode(CodeRunDTO dto);
 
     PageResult<UserSubmissionRecordVO> getCurrentUserSubmissions(Long userId, Integer page, Integer size);

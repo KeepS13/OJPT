@@ -26,18 +26,20 @@ import com.example.ojpt.vo.DistributionBucketVO;
 import com.example.ojpt.vo.SubmissionCreateResultVO;
 import com.example.ojpt.vo.SubmissionRankStatsVO;
 import com.example.ojpt.vo.UserSubmissionRecordVO;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Comparator;
+import java.util.Objects;
+import java.util.concurrent.Executor;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
 public class SubmissionServiceImpl implements SubmissionService {
 
     private static final String STATUS_PUBLISHED = "PUBLISHED";
@@ -61,6 +63,67 @@ public class SubmissionServiceImpl implements SubmissionService {
     private final ProblemTestCaseMapper problemTestCaseMapper;
     private final SubmissionCaseResultMapper submissionCaseResultMapper;
     private final CodeExecutionService codeExecutionService;
+    private final Executor judgeExecutor;
+    private final boolean asynchronousExecution;
+
+    public SubmissionServiceImpl(
+            SubmissionMapper submissionMapper,
+            ProblemMapper problemMapper,
+            UserProblemProgressMapper userProblemProgressMapper,
+            ProblemTestCaseMapper problemTestCaseMapper,
+            SubmissionCaseResultMapper submissionCaseResultMapper,
+            CodeExecutionService codeExecutionService) {
+        this(
+                submissionMapper,
+                problemMapper,
+                userProblemProgressMapper,
+                problemTestCaseMapper,
+                submissionCaseResultMapper,
+                codeExecutionService,
+                Runnable::run,
+                false
+        );
+    }
+
+    @Autowired
+    public SubmissionServiceImpl(
+            SubmissionMapper submissionMapper,
+            ProblemMapper problemMapper,
+            UserProblemProgressMapper userProblemProgressMapper,
+            ProblemTestCaseMapper problemTestCaseMapper,
+            SubmissionCaseResultMapper submissionCaseResultMapper,
+            CodeExecutionService codeExecutionService,
+            @Qualifier("submissionJudgeExecutor") Executor judgeExecutor) {
+        this(
+                submissionMapper,
+                problemMapper,
+                userProblemProgressMapper,
+                problemTestCaseMapper,
+                submissionCaseResultMapper,
+                codeExecutionService,
+                judgeExecutor,
+                true
+        );
+    }
+
+    private SubmissionServiceImpl(
+            SubmissionMapper submissionMapper,
+            ProblemMapper problemMapper,
+            UserProblemProgressMapper userProblemProgressMapper,
+            ProblemTestCaseMapper problemTestCaseMapper,
+            SubmissionCaseResultMapper submissionCaseResultMapper,
+            CodeExecutionService codeExecutionService,
+            Executor judgeExecutor,
+            boolean asynchronousExecution) {
+        this.submissionMapper = submissionMapper;
+        this.problemMapper = problemMapper;
+        this.userProblemProgressMapper = userProblemProgressMapper;
+        this.problemTestCaseMapper = problemTestCaseMapper;
+        this.submissionCaseResultMapper = submissionCaseResultMapper;
+        this.codeExecutionService = codeExecutionService;
+        this.judgeExecutor = judgeExecutor;
+        this.asynchronousExecution = asynchronousExecution;
+    }
 
     @Override
     public CodeRunResultVO runCode(CodeRunDTO dto) {
@@ -166,22 +229,11 @@ public class SubmissionServiceImpl implements SubmissionService {
         problem.setSubmitCount((problem.getSubmitCount() == null ? 0 : problem.getSubmitCount()) + 1);
         problemMapper.updateById(problem);
 
-        UserProblemProgress progress = userProblemProgressMapper.selectOne(
-                new LambdaQueryWrapper<UserProblemProgress>()
-                        .eq(UserProblemProgress::getUserId, userId)
-                        .eq(UserProblemProgress::getProblemId, problem.getId())
-        );
-        if (progress == null) {
-            progress = new UserProblemProgress()
-                    .setUserId(userId)
-                    .setProblemId(problem.getId())
-                    .setStatus(PROGRESS_ATTEMPTED)
-                    .setLastSubmissionId(submission.getId());
-            userProblemProgressMapper.insert(progress);
-        } else {
-            progress.setStatus(PROGRESS_ATTEMPTED);
-            progress.setLastSubmissionId(submission.getId());
-            userProblemProgressMapper.updateById(progress);
+        updateAttemptedProgress(userId, problem.getId(), submission.getId());
+
+        if (asynchronousExecution) {
+            judgeExecutor.execute(() -> processQueuedSubmission(submission.getId()));
+            return new SubmissionCreateResultVO(submission.getId(), STATUS_QUEUED, "宸茶繘鍏ュ垽棰樺队鍒?");
         }
 
         List<ProblemTestCase> judgeCases = new java.util.ArrayList<>(problemTestCaseMapper.selectList(
@@ -213,12 +265,167 @@ public class SubmissionServiceImpl implements SubmissionService {
         if (STATUS_AC.equals(result.getStatus())) {
             problem.setAcceptedCount((problem.getAcceptedCount() == null ? 0 : problem.getAcceptedCount()) + 1);
             problemMapper.updateById(problem);
-            progress.setStatus(PROGRESS_SOLVED);
-            progress.setLastSubmissionId(submission.getId());
-            userProblemProgressMapper.updateById(progress);
+            updateSolvedProgress(userId, problem.getId(), submission.getId());
         }
 
         return result;
+    }
+
+    @Override
+    public SubmissionCreateResultVO getSubmissionResult(Long userId, Long submissionId) {
+        Submission submission = submissionMapper.selectOne(
+                new LambdaQueryWrapper<Submission>()
+                        .eq(Submission::getId, submissionId)
+                        .eq(Submission::getUserId, userId)
+        );
+        if (submission == null) {
+            throw BusinessException.notFound("submission");
+        }
+        return buildSubmissionResult(submission);
+    }
+
+    private void processQueuedSubmission(Long submissionId) {
+        Submission submission = submissionMapper.selectById(submissionId);
+        if (submission == null) {
+            return;
+        }
+
+        Problem problem = problemMapper.selectById(submission.getProblemId());
+        if (problem == null || !STATUS_PUBLISHED.equals(problem.getStatus())) {
+            submission.setStatus(STATUS_SYSTEM_ERROR);
+            submission.setJudgeMessage("棰樼洰涓嶅瓨鍦ㄦ垨涓嶅彲鐢?");
+            submissionMapper.updateById(submission);
+            return;
+        }
+
+        List<ProblemTestCase> judgeCases = new java.util.ArrayList<>(problemTestCaseMapper.selectList(
+                new LambdaQueryWrapper<ProblemTestCase>()
+                        .eq(ProblemTestCase::getProblemId, problem.getId())
+                        .in(ProblemTestCase::getCaseType, CASE_TYPE_SAMPLE, CASE_TYPE_HIDDEN)
+                        .orderByAsc(ProblemTestCase::getSortOrder)
+                        .orderByAsc(ProblemTestCase::getId)
+        ));
+        judgeCases.sort(Comparator
+                .comparingInt((ProblemTestCase item) -> CASE_TYPE_SAMPLE.equals(item.getCaseType()) ? 0 : 1)
+                .thenComparing(ProblemTestCase::getSortOrder)
+                .thenComparing(ProblemTestCase::getId));
+
+        if (judgeCases.isEmpty()) {
+            submission.setStatus(STATUS_SYSTEM_ERROR);
+            submission.setJudgeMessage("褰撳墠棰樼洰灏氭湭閰嶇疆鍒ら鐢ㄤ緥");
+            submissionMapper.updateById(submission);
+            return;
+        }
+
+        try {
+            submission.setStatus(STATUS_RUNNING);
+            submission.setJudgeMessage("鍒ら涓?");
+            submissionMapper.updateById(submission);
+
+            SubmissionCreateResultVO result = judgeSubmission(problem, submission, judgeCases);
+            if (STATUS_AC.equals(result.getStatus())) {
+                problem.setAcceptedCount((problem.getAcceptedCount() == null ? 0 : problem.getAcceptedCount()) + 1);
+                problemMapper.updateById(problem);
+                updateSolvedProgress(submission.getUserId(), problem.getId(), submission.getId());
+            }
+        } catch (RuntimeException ex) {
+            submission.setStatus(STATUS_SYSTEM_ERROR);
+            submission.setJudgeMessage(ex.getMessage() == null || ex.getMessage().isBlank() ? "鍒ら澶辫触" : ex.getMessage());
+            submissionMapper.updateById(submission);
+        }
+    }
+
+    private SubmissionCreateResultVO buildSubmissionResult(Submission submission) {
+        List<CodeRunCaseResultVO> caseResults = submissionCaseResultMapper.selectList(
+                new LambdaQueryWrapper<SubmissionCaseResult>()
+                        .eq(SubmissionCaseResult::getSubmissionId, submission.getId())
+                        .orderByAsc(SubmissionCaseResult::getCaseIndex)
+                        .orderByAsc(SubmissionCaseResult::getId)
+        ).stream().map(this::toSubmissionCaseResultVO).map(this::sanitizeCaseResultForResponse).toList();
+
+        SubmissionRankStatsVO rankStats = buildRankStats(submission.getProblemId());
+        Integer rank = STATUS_AC.equals(submission.getStatus()) && submission.getTimeMs() != null
+                ? calculateAcRank(submission.getProblemId(), submission.getTimeMs())
+                : null;
+
+        return new SubmissionCreateResultVO(
+                submission.getId(),
+                submission.getStatus(),
+                summarizeSubmissionMessage(submission),
+                submission.getTimeMs(),
+                rank,
+                caseResults.size(),
+                rankStats,
+                caseResults
+        );
+    }
+
+    private String summarizeSubmissionMessage(Submission submission) {
+        return switch (submission.getStatus()) {
+            case STATUS_AC -> "鍒ら閫氳繃";
+            case STATUS_WA -> "绛旀閿欒";
+            case STATUS_CE -> "缂栬瘧澶辫触";
+            case STATUS_RE -> "杩愯閿欒";
+            case STATUS_TLE -> "杩愯瓒呮椂";
+            case STATUS_RUNNING -> "鍒ら涓?";
+            case STATUS_QUEUED -> "鎺掗槦涓?";
+            case STATUS_SYSTEM_ERROR -> "绯荤粺閿欒";
+            default -> submission.getJudgeMessage() == null ? submission.getStatus() : submission.getJudgeMessage();
+        };
+    }
+
+    private CodeRunCaseResultVO toSubmissionCaseResultVO(SubmissionCaseResult caseResult) {
+        return new CodeRunCaseResultVO(
+                caseResult.getCaseIndex(),
+                caseResult.getCaseType(),
+                caseResult.getStatus(),
+                caseResult.getInputText(),
+                caseResult.getExpectedOutput(),
+                caseResult.getActualOutput(),
+                caseResult.getErrorOutput(),
+                caseResult.getTimeMs() == null ? null : caseResult.getTimeMs().longValue(),
+                caseResult.getMessage()
+        );
+    }
+
+    private void updateAttemptedProgress(Long userId, Long problemId, Long submissionId) {
+        UserProblemProgress progress = userProblemProgressMapper.selectOne(
+                new LambdaQueryWrapper<UserProblemProgress>()
+                        .eq(UserProblemProgress::getUserId, userId)
+                        .eq(UserProblemProgress::getProblemId, problemId)
+        );
+        if (progress == null) {
+            userProblemProgressMapper.insert(new UserProblemProgress()
+                    .setUserId(userId)
+                    .setProblemId(problemId)
+                    .setStatus(PROGRESS_ATTEMPTED)
+                    .setLastSubmissionId(submissionId));
+            return;
+        }
+
+        progress.setStatus(PROGRESS_ATTEMPTED);
+        progress.setLastSubmissionId(submissionId);
+        userProblemProgressMapper.updateById(progress);
+    }
+
+    private void updateSolvedProgress(Long userId, Long problemId, Long submissionId) {
+        UserProblemProgress progress = userProblemProgressMapper.selectOne(
+                new LambdaQueryWrapper<UserProblemProgress>()
+                        .eq(UserProblemProgress::getUserId, userId)
+                        .eq(UserProblemProgress::getProblemId, problemId)
+        );
+        if (progress == null) {
+            userProblemProgressMapper.insert(new UserProblemProgress()
+                    .setUserId(userId)
+                    .setProblemId(problemId)
+                    .setStatus(PROGRESS_SOLVED)
+                    .setLastSubmissionId(submissionId));
+            return;
+        }
+
+        progress.setStatus(PROGRESS_SOLVED);
+        progress.setLastSubmissionId(submissionId);
+        userProblemProgressMapper.updateById(progress);
     }
 
     private SubmissionCreateResultVO judgeSubmission(Problem problem, Submission submission, List<ProblemTestCase> judgeCases) {

@@ -11,6 +11,7 @@ const {
   getProblemCodeDraftMock,
   runProblemCodeMock,
   saveProblemCodeDraftMock,
+  getProblemSubmissionResultMock,
   submitProblemCodeMock,
   renderMarkdownMock,
   getProblemDefaultTestCasesMock,
@@ -25,6 +26,7 @@ const {
   getProblemCodeDraftMock: vi.fn(),
   runProblemCodeMock: vi.fn(),
   saveProblemCodeDraftMock: vi.fn(),
+  getProblemSubmissionResultMock: vi.fn(),
   submitProblemCodeMock: vi.fn(),
   renderMarkdownMock: vi.fn(),
   getProblemDefaultTestCasesMock: vi.fn(),
@@ -41,6 +43,7 @@ vi.mock('@/api/problem', () => ({
   getProblemCodeDraft: getProblemCodeDraftMock,
   runProblemCode: runProblemCodeMock,
   saveProblemCodeDraft: saveProblemCodeDraftMock,
+  getProblemSubmissionResult: getProblemSubmissionResultMock,
   submitProblemCode: submitProblemCodeMock,
 }))
 
@@ -128,6 +131,7 @@ describe('ProblemSolveView actions', () => {
     getProblemCodeDraftMock.mockReset()
     runProblemCodeMock.mockReset()
     saveProblemCodeDraftMock.mockReset()
+    getProblemSubmissionResultMock.mockReset()
     submitProblemCodeMock.mockReset()
     renderMarkdownMock.mockReset()
     getProblemDefaultTestCasesMock.mockReset()
@@ -159,7 +163,7 @@ describe('ProblemSolveView actions', () => {
     submitProblemCodeMock.mockResolvedValue({
       data: {
         submissionId: '9001',
-        status: 'AC',
+        status: 'QUEUED',
         message: '判题通过',
         timeMs: 24,
         rank: 3,
@@ -194,6 +198,48 @@ describe('ProblemSolveView actions', () => {
             errorOutput: '',
             timeMs: 16,
             message: '通过',
+          },
+        ],
+      },
+    })
+    getProblemSubmissionResultMock.mockResolvedValue({
+      data: {
+        submissionId: '9001',
+        status: 'AC',
+        message: 'accepted',
+        timeMs: 24,
+        rank: 3,
+        totalCaseCount: 2,
+        rankStats: {
+          acceptedCount: 8,
+          timeBuckets: [
+            { label: '12-33 ms', min: 12, max: 33, count: 5 },
+            { label: '34-55 ms', min: 34, max: 55, count: 3 },
+            { label: '56-77 ms', min: 56, max: 77, count: 0 },
+          ],
+        },
+        caseResults: [
+          {
+            caseIndex: 0,
+            caseType: 'SAMPLE',
+            status: 'AC',
+            inputText: '1 2',
+            expectedOutput: '3',
+            actualOutput: '3\n',
+            errorOutput: '',
+            timeMs: 8,
+            message: 'ok',
+          },
+          {
+            caseIndex: 1,
+            caseType: 'HIDDEN',
+            status: 'AC',
+            inputText: '2 3',
+            expectedOutput: '5',
+            actualOutput: '5\n',
+            errorOutput: '',
+            timeMs: 16,
+            message: 'ok',
           },
         ],
       },
@@ -557,7 +603,7 @@ describe('ProblemSolveView actions', () => {
     })
     runProblemCodeMock.mockResolvedValue({
       data: {
-        status: 'WA',
+        status: 'QUEUED',
         caseResults: [
           {
             caseIndex: 0,
@@ -700,6 +746,47 @@ describe('ProblemSolveView actions', () => {
     submitProblemCodeMock.mockReturnValue(new Promise((resolve) => {
       resolveSubmit = resolve
     }))
+    getProblemSubmissionResultMock.mockResolvedValue({
+      data: {
+        submissionId: '9002',
+        status: 'WA',
+        message: 'wrong answer',
+        timeMs: 20,
+        rank: null,
+        totalCaseCount: 3,
+        rankStats: {
+          acceptedCount: 4,
+          timeBuckets: [
+            { label: '10-20 ms', min: 10, max: 20, count: 3 },
+            { label: '21-31 ms', min: 21, max: 31, count: 1 },
+          ],
+        },
+        caseResults: [
+          {
+            caseIndex: 0,
+            caseType: 'SAMPLE',
+            status: 'AC',
+            inputText: '1 2',
+            expectedOutput: '3',
+            actualOutput: '3\n',
+            errorOutput: '',
+            timeMs: 8,
+            message: 'ok',
+          },
+          {
+            caseIndex: 1,
+            caseType: 'HIDDEN',
+            status: 'WA',
+            inputText: '2 3',
+            expectedOutput: '5',
+            actualOutput: '4\n',
+            errorOutput: 'wrong output',
+            timeMs: 20,
+            message: 'mismatch',
+          },
+        ],
+      },
+    })
 
     const wrapper = mount(ProblemSolveView, {
       attachTo: document.body,
@@ -718,7 +805,7 @@ describe('ProblemSolveView actions', () => {
     resolveSubmit({
       data: {
         submissionId: '9002',
-        status: 'WA',
+        status: 'QUEUED',
         message: '答案错误',
         timeMs: 20,
         rank: null,

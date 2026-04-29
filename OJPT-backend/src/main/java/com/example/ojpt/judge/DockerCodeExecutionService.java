@@ -41,7 +41,7 @@ public class DockerCodeExecutionService implements CodeExecutionService {
             Files.writeString(workspace.resolve("input.txt"), inputText == null ? "" : inputText, StandardCharsets.UTF_8);
 
             if (requiresCompilation(language)) {
-                ProcessOutcome compileOutcome = runDockerCommand(language, workspace, getCompileCommand(language), 10000);
+                ProcessOutcome compileOutcome = runDockerCommand(language, workspace, getCompileCommand(language), 10000, memoryLimitKb);
                 if (compileOutcome.timedOut()) {
                     return CodeExecutionResult.builder()
                             .compileSuccess(false)
@@ -62,7 +62,7 @@ public class DockerCodeExecutionService implements CodeExecutionService {
 
             long timeoutMs = Math.max(timeLimitMs == null ? 2000 : timeLimitMs, 2000);
             long start = System.nanoTime();
-            ProcessOutcome runOutcome = runDockerCommand(language, workspace, getRunCommand(language), timeoutMs);
+            ProcessOutcome runOutcome = runDockerCommand(language, workspace, getRunCommand(language), timeoutMs, memoryLimitKb);
             long elapsed = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
 
             if (runOutcome.timedOut()) {
@@ -142,7 +142,12 @@ public class DockerCodeExecutionService implements CodeExecutionService {
         };
     }
 
-    private ProcessOutcome runDockerCommand(String language, Path workspace, String command, long timeoutMs) throws IOException, InterruptedException {
+    private ProcessOutcome runDockerCommand(
+            String language,
+            Path workspace,
+            String command,
+            long timeoutMs,
+            Integer memoryLimitKb) throws IOException, InterruptedException {
         String containerName = "ojpt-judge-" + UUID.randomUUID();
         String mountPath = workspace.toAbsolutePath().toString().replace('\\', '/');
         List<String> args = List.of(
@@ -156,7 +161,7 @@ public class DockerCodeExecutionService implements CodeExecutionService {
                 "--cpus",
                 cpuLimit,
                 "--memory",
-                memoryMb + "m",
+                resolveMemoryLimit(memoryLimitKb),
                 "-v",
                 mountPath + ":/workspace",
                 "-w",
@@ -178,6 +183,13 @@ public class DockerCodeExecutionService implements CodeExecutionService {
         String stdout = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         String stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
         return new ProcessOutcome(process.exitValue(), stdout, stderr, false);
+    }
+
+    private String resolveMemoryLimit(Integer memoryLimitKb) {
+        if (memoryLimitKb != null && memoryLimitKb > 0) {
+            return String.valueOf(memoryLimitKb.longValue() * 1024L);
+        }
+        return memoryMb + "m";
     }
 
     private record ProcessOutcome(int exitCode, String stdout, String stderr, boolean timedOut) {

@@ -17,6 +17,8 @@ import com.example.ojpt.vo.SubmissionCreateResultVO;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -24,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -57,7 +60,15 @@ class SubmissionCreationServiceTest {
                 .setTimeLimitMs(1000)
                 .setMemoryLimitKb(256000);
         when(problemMapper.selectOne(any())).thenReturn(problem);
-        when(progressMapper.selectOne(any())).thenReturn(null);
+        when(progressMapper.selectOne(any())).thenReturn(
+                null,
+                new UserProblemProgress()
+                        .setId(3001L)
+                        .setUserId(1001L)
+                        .setProblemId(2100000000000000001L)
+                        .setStatus("ATTEMPTED")
+                        .setLastSubmissionId(2300000000000000009L)
+        );
         when(judgeCaseMapper.selectList(any())).thenReturn(List.of(
                 new ProblemTestCase()
                         .setProblemId(2100000000000000001L)
@@ -233,7 +244,16 @@ class SubmissionCreationServiceTest {
                 .setTimeLimitMs(1000)
                 .setMemoryLimitKb(256000);
         when(problemMapper.selectOne(any())).thenReturn(problem);
-        when(progressMapper.selectOne(any())).thenReturn(null);
+        when(problemMapper.selectById(2100000000000000003L)).thenReturn(problem);
+        when(progressMapper.selectOne(any())).thenReturn(
+                null,
+                new UserProblemProgress()
+                        .setId(3002L)
+                        .setUserId(1001L)
+                        .setProblemId(2100000000000000003L)
+                        .setStatus("ATTEMPTED")
+                        .setLastSubmissionId(2300000000000000012L)
+        );
         when(judgeCaseMapper.selectList(any())).thenReturn(List.of(
                 new ProblemTestCase()
                         .setProblemId(2100000000000000002L)
@@ -283,6 +303,101 @@ class SubmissionCreationServiceTest {
         assertEquals(1, result.getCaseResults().size());
         assertEquals("SAMPLE", result.getCaseResults().get(0).getCaseType());
         assertEquals("abcabcbb", result.getCaseResults().get(0).getInputText());
+        verify(codeExecutionService, times(1)).execute(any(), any(), any(), any(), any());
+        verify(caseResultMapper, times(1)).insert(any());
+    }
+
+    @Test
+    void createSubmission_returnsQueuedBeforeBackgroundJudgeRuns() {
+        SubmissionMapper submissionMapper = mock(SubmissionMapper.class);
+        ProblemMapper problemMapper = mock(ProblemMapper.class);
+        UserProblemProgressMapper progressMapper = mock(UserProblemProgressMapper.class);
+        ProblemTestCaseMapper judgeCaseMapper = mock(ProblemTestCaseMapper.class);
+        SubmissionCaseResultMapper caseResultMapper = mock(SubmissionCaseResultMapper.class);
+        CodeExecutionService codeExecutionService = mock(CodeExecutionService.class);
+        AtomicReference<Runnable> queuedTask = new AtomicReference<>();
+        Executor judgeExecutor = queuedTask::set;
+        SubmissionService service = new SubmissionServiceImpl(
+                submissionMapper,
+                problemMapper,
+                progressMapper,
+                judgeCaseMapper,
+                caseResultMapper,
+                codeExecutionService,
+                judgeExecutor
+        );
+
+        Problem problem = new Problem()
+                .setId(2100000000000000003L)
+                .setProblemNo(3)
+                .setStatus("PUBLISHED")
+                .setSubmitCount(1L)
+                .setAcceptedCount(0L)
+                .setTimeLimitMs(1000)
+                .setMemoryLimitKb(256000);
+        when(problemMapper.selectOne(any())).thenReturn(problem);
+        when(problemMapper.selectById(2100000000000000003L)).thenReturn(problem);
+        when(progressMapper.selectOne(any())).thenReturn(
+                null,
+                new UserProblemProgress()
+                        .setId(3002L)
+                        .setUserId(1001L)
+                        .setProblemId(2100000000000000003L)
+                        .setStatus("ATTEMPTED")
+                        .setLastSubmissionId(2300000000000000012L)
+        );
+        when(judgeCaseMapper.selectList(any())).thenReturn(List.of(
+                new ProblemTestCase()
+                        .setProblemId(2100000000000000003L)
+                        .setCaseType("SAMPLE")
+                        .setSortOrder(1)
+                        .setInputText("1 2")
+                        .setExpectedOutput("3")
+        ));
+        when(codeExecutionService.execute(any(), any(), any(), any(), any())).thenReturn(
+                CodeExecutionResult.builder()
+                        .compileSuccess(true)
+                        .runtimeSuccess(true)
+                        .timedOut(false)
+                        .stdout("3")
+                        .stderr("")
+                        .timeMs(5L)
+                        .build()
+        );
+        when(submissionMapper.selectList(any())).thenReturn(List.of(
+                new Submission().setProblemId(2100000000000000003L).setStatus("AC").setTimeMs(5)
+        ));
+        AtomicReference<Submission> storedSubmission = new AtomicReference<>();
+        doAnswer(invocation -> {
+            Submission submission = invocation.getArgument(0);
+            if (submission.getId() == null) {
+                submission.setId(2300000000000000012L);
+            }
+            storedSubmission.set(new Submission()
+                    .setId(submission.getId())
+                    .setUserId(submission.getUserId())
+                    .setProblemId(submission.getProblemId())
+                    .setLanguage(submission.getLanguage())
+                    .setSourceCode(submission.getSourceCode())
+                    .setStatus(submission.getStatus())
+                    .setJudgeMessage(submission.getJudgeMessage()));
+            return 1;
+        }).when(submissionMapper).insert(any(Submission.class));
+        when(submissionMapper.selectById(2300000000000000012L)).thenAnswer(invocation -> storedSubmission.get());
+
+        SubmissionCreateDTO dto = new SubmissionCreateDTO();
+        dto.setLanguage("Java");
+        dto.setSourceCode("public class Main {}");
+
+        SubmissionCreateResultVO result = service.createSubmission(1001L, 3, dto);
+
+        assertEquals(2300000000000000012L, result.getSubmissionId());
+        assertEquals("QUEUED", result.getStatus());
+        assertNotNull(queuedTask.get());
+        verify(codeExecutionService, never()).execute(any(), any(), any(), any(), any());
+
+        queuedTask.get().run();
+
         verify(codeExecutionService, times(1)).execute(any(), any(), any(), any(), any());
         verify(caseResultMapper, times(1)).insert(any());
     }

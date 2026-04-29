@@ -12,11 +12,13 @@ const UserCenterLayout = () => import('@/components/layout/UserCenterLayout.vue'
 const ProfileView = () => import('@/views/ProfileView.vue')
 const SecurityView = () => import('@/views/SecurityView.vue')
 const SubmissionRecordsView = () => import('@/views/SubmissionRecordsView.vue')
+const TrainingDashboardView = () => import('@/views/TrainingDashboardView.vue')
 const AdminLayout = () => import('@/views/admin/AdminLayout.vue')
 const OverviewTab = () => import('@/views/admin/OverviewTab.vue')
 const UserManagement = () => import('@/views/admin/UserManagement.vue')
 const ProblemManagement = () => import('@/views/admin/ProblemManagement.vue')
 const ProblemEdit = () => import('@/views/admin/ProblemEdit.vue')
+const TagManagement = () => import('@/views/admin/TagManagement.vue')
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -45,6 +47,11 @@ const router = createRouter({
           path: '',
           name: 'profile',
           component: ProfileView,
+        },
+        {
+          path: 'training',
+          name: 'training-dashboard',
+          component: TrainingDashboardView,
         },
         {
           path: 'security',
@@ -82,6 +89,11 @@ const router = createRouter({
           path: 'problems/:problemId',
           name: 'admin-problem-edit',
           component: ProblemEdit,
+        },
+        {
+          path: 'tags',
+          name: 'admin-tags',
+          component: TagManagement,
         },
       ],
     },

@@ -28,6 +28,7 @@ describe('UserCenterLayout', () => {
           component: UserCenterLayout,
           children: [
             { path: '', component: { template: '<div>profile</div>' } },
+            { path: 'training', component: { template: '<div>training</div>' } },
             { path: 'submissions', component: { template: '<div>submissions</div>' } },
             { path: 'security', component: { template: '<div>security</div>' } },
           ],
@@ -47,10 +48,43 @@ describe('UserCenterLayout', () => {
       },
     })
 
-    const activeLabels = wrapper
-      .findAll('.sidebar-nav-item.active .nav-label')
-      .map((node) => node.text())
+    const activeItem = wrapper.find('.sidebar-nav-item.active')
+    expect(activeItem.attributes('href')).toBe('/profile/submissions')
+  })
 
-    expect(Array.from(new Set(activeLabels))).toEqual(['解题记录'])
+  it('renders and highlights the training dashboard entry on /profile/training', async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        {
+          path: '/profile',
+          component: UserCenterLayout,
+          children: [
+            { path: '', component: { template: '<div>profile</div>' } },
+            { path: 'training', component: { template: '<div>training</div>' } },
+            { path: 'submissions', component: { template: '<div>submissions</div>' } },
+            { path: 'security', component: { template: '<div>security</div>' } },
+          ],
+        },
+      ],
+    })
+
+    router.push('/profile/training')
+    await router.isReady()
+
+    const wrapper = mount(UserCenterLayout, {
+      global: {
+        plugins: [router, ElementPlus],
+        stubs: {
+          UserAvatar: { template: '<div class="avatar-stub" />' },
+        },
+      },
+    })
+
+    const links = wrapper.findAll('.sidebar-nav-item').map((node) => node.attributes('href'))
+    expect(links).toContain('/profile/training')
+
+    const activeItem = wrapper.find('.sidebar-nav-item.active')
+    expect(activeItem.attributes('href')).toBe('/profile/training')
   })
 })

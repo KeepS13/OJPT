@@ -11,6 +11,7 @@ import {
   getProblemCodeDraft,
   runProblemCode,
   saveProblemCodeDraft,
+  getProblemSubmissionResult,
   submitProblemCode,
   type ProblemCodeRunCaseResult,
   type ProblemCodeRunResult,
@@ -611,6 +612,10 @@ let timerHandle: ReturnType<typeof setInterval> | null = null
 let draftSaveTimer: ReturnType<typeof setTimeout> | null = null
 let suppressDraftSave = false
 let draftSaveSeq = 0
+let submitPollSeq = 0
+
+const SUBMISSION_POLL_INTERVAL_MS = 1000
+const SUBMISSION_POLL_MAX_ATTEMPTS = 60
 
 const draftSyncText = computed(() => {
   const map = {
@@ -728,6 +733,31 @@ const handleSubmitCode = async () => {
   }
 }
 
+const isTerminalSubmissionStatus = (status?: string | null) =>
+  !!status && ['AC', 'WA', 'TLE', 'MLE', 'RE', 'CE', 'SYSTEM_ERROR'].includes(status)
+
+const pollSubmissionResultUntilFinished = async (submissionId: string | number, pollSeq: number) => {
+  for (let attempt = 0; attempt < SUBMISSION_POLL_MAX_ATTEMPTS; attempt += 1) {
+    if (pollSeq !== submitPollSeq) {
+      return null
+    }
+
+    const result = await getProblemSubmissionResult(submissionId)
+    if (pollSeq !== submitPollSeq) {
+      return null
+    }
+
+    submitResult.value = result.data
+    if (isTerminalSubmissionStatus(result.data.status)) {
+      return result.data
+    }
+
+    await new Promise((resolve) => window.setTimeout(resolve, SUBMISSION_POLL_INTERVAL_MS))
+  }
+
+  throw new Error('判题耗时过长，请稍后在提交记录中查看结果')
+}
+
 const handleSubmitCodeReal = async () => {
   if (!isAuthed.value) {
     showLogin.value = true
@@ -745,12 +775,20 @@ const handleSubmitCodeReal = async () => {
     submitError.value = ''
     submitResult.value = null
     submitDialogVisible.value = true
+    const currentPollSeq = ++submitPollSeq
     const result = await submitProblemCode(Number(routeProblemNo.value), {
       language: activeLanguage.value,
       sourceCode: code.value,
     })
     submitResult.value = result.data
+    const finalResult = isTerminalSubmissionStatus(result.data.status)
+      ? result.data
+      : await pollSubmissionResultUntilFinished(result.data.submissionId, currentPollSeq)
     ElMessage.success(result.data.message || '代码已提交')
+    if (finalResult) {
+      submitResult.value = finalResult
+      result.data = finalResult
+    }
     await loadProblemDetail()
   } catch (e) {
     submitError.value = e instanceof Error ? e.message : '提交失败'
@@ -1207,6 +1245,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  submitPollSeq += 1
   stopResizing()
   stopEditorResizing()
   stopTimer()

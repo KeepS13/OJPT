@@ -18,6 +18,7 @@ vi.mock('@/api/request', () => ({
 
 import {
   getCurrentUserDetail,
+  getCurrentUserTrainingDashboard,
   getCurrentUserSubmissionRecords,
   updateUserInfo,
   uploadAvatar,
@@ -43,6 +44,14 @@ describe('user api', () => {
     await getCurrentUserDetail()
 
     expect(getMock).toHaveBeenCalledWith('/users/me/detail')
+  })
+
+  it('getCurrentUserTrainingDashboard calls /users/me/training-dashboard', async () => {
+    getMock.mockResolvedValue({ data: {} })
+
+    await getCurrentUserTrainingDashboard()
+
+    expect(getMock).toHaveBeenCalledWith('/users/me/training-dashboard')
   })
 
   it('getCurrentUserSubmissionRecords calls /users/me/submissions with paging params', async () => {

@@ -1,25 +1,34 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
-import { ElMenu, ElMenuItem, ElContainer, ElAside, ElMain, ElHeader } from 'element-plus'
-import {
-  DataAnalysis,
-  User,
-  Collection,
-} from '@element-plus/icons-vue'
+import { computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElAside, ElContainer, ElHeader, ElMain, ElMenu, ElMenuItem } from 'element-plus'
+import { Collection, DataAnalysis, PriceTag, User } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const route = useRoute()
 
-// 当前激活的菜单项
-const activeMenu = ref(route.path)
-
-// 菜单项配置
 const menuItems = [
   { path: '/admin', icon: DataAnalysis, title: '数据概览' },
   { path: '/admin/users', icon: User, title: '用户管理' },
   { path: '/admin/problems', icon: Collection, title: '题库管理' },
+  { path: '/admin/tags', icon: PriceTag, title: '标签管理' },
 ]
+
+const activeMenu = computed(() => {
+  const matched = menuItems.find((item) =>
+    item.path === '/admin' ? route.path === item.path : route.path.startsWith(item.path),
+  )
+
+  return matched?.path ?? '/admin'
+})
+
+const pageTitle = computed(() => {
+  const matched = menuItems.find((item) =>
+    item.path === '/admin' ? route.path === item.path : route.path.startsWith(item.path),
+  )
+
+  return matched?.title ?? '管理控制台'
+})
 
 const handleMenuSelect = (path: string) => {
   router.push(path)
@@ -31,23 +40,22 @@ const handleMenuSelect = (path: string) => {
     <el-container>
       <el-aside width="220px">
         <div class="admin-logo">
-          <h2>管理后台</h2>
+          <h2>管理控制台</h2>
         </div>
-        <el-menu
-          :default-active="activeMenu"
-          class="admin-menu"
-          @select="handleMenuSelect"
-        >
+
+        <el-menu :default-active="activeMenu" class="admin-menu" @select="handleMenuSelect">
           <el-menu-item v-for="item in menuItems" :key="item.path" :index="item.path">
             <el-icon><component :is="item.icon" /></el-icon>
             <span>{{ item.title }}</span>
           </el-menu-item>
         </el-menu>
       </el-aside>
+
       <el-container>
         <el-header class="admin-header">
-          <h1 class="page-title">{{ menuItems.find(m => m.path === route.path)?.title || '管理控制台' }}</h1>
+          <h1 class="page-title">{{ pageTitle }}</h1>
         </el-header>
+
         <el-main class="admin-main">
           <router-view />
         </el-main>
@@ -59,7 +67,9 @@ const handleMenuSelect = (path: string) => {
 <style scoped>
 .admin-layout {
   min-height: 100vh;
-  background-color: #f5f7fa;
+  background:
+    radial-gradient(circle at top right, rgba(59, 130, 246, 0.08), transparent 30%),
+    #f5f7fa;
 }
 
 .admin-layout :deep(.el-container) {
@@ -67,7 +77,7 @@ const handleMenuSelect = (path: string) => {
 }
 
 .admin-layout :deep(.el-aside) {
-  background-color: #ffffff;
+  background: #ffffff;
   border-right: 1px solid #e5e7eb;
 }
 
@@ -78,47 +88,48 @@ const handleMenuSelect = (path: string) => {
 
 .admin-logo h2 {
   margin: 0;
+  color: #0f172a;
   font-size: 18px;
-  font-weight: 600;
-  color: #111827;
+  font-weight: 700;
 }
 
 .admin-menu {
   border-right: none;
+  padding: 10px 8px;
 }
 
 .admin-menu :deep(.el-menu-item) {
   height: 48px;
   line-height: 48px;
-  margin: 4px 8px;
-  border-radius: 8px;
+  margin: 4px 0;
+  border-radius: 10px;
 }
 
 .admin-menu :deep(.el-menu-item.is-active) {
-  background-color: #eff6ff;
-  color: #2563eb;
+  background: #dbeafe;
+  color: #1d4ed8;
 }
 
 .admin-header {
-  background-color: #ffffff;
-  border-bottom: 1px solid #e5e7eb;
   display: flex;
   align-items: center;
   padding: 0 24px;
-  height: 60px;
+  height: 64px;
+  background: rgba(255, 255, 255, 0.92);
+  border-bottom: 1px solid #e5e7eb;
+  backdrop-filter: blur(14px);
 }
 
 .page-title {
   margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: #111827;
+  color: #0f172a;
+  font-size: 20px;
+  font-weight: 700;
 }
 
 .admin-main {
   padding: 24px;
-  background-color: #f5f7fa;
-  overflow: auto;
   min-height: 0;
+  overflow: auto;
 }
 </style>

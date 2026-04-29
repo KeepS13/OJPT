@@ -272,8 +272,6 @@ public class ProblemServiceImpl implements ProblemService {
         int p = PaginationUtils.normalizePage(page);
         int s = PaginationUtils.normalizeSize(size);
 
-        Page<Problem> pageParam = new Page<>(p, s);
-
         LambdaQueryWrapper<Problem> wrapper = new LambdaQueryWrapper<Problem>()
             .eq(Problem::getIsDeleted, 0)
             .eq(Problem::getStatus, STATUS_PUBLISHED);
@@ -283,7 +281,7 @@ public class ProblemServiceImpl implements ProblemService {
             wrapper.eq(Problem::getDifficulty, difficulty.trim());
         }
 
-        // 标签过滤：通过 problem_tag 中间表筛选 problemId
+        // Filter by tag through the problem_tag join table.
         if (tagId != null) {
             List<Long> tagProblemIds = problemTagMapper.selectList(
                     new LambdaQueryWrapper<ProblemTag>()
@@ -295,28 +293,59 @@ public class ProblemServiceImpl implements ProblemService {
             wrapper.in(Problem::getId, tagProblemIds);
         }
 
-        // 排序
+        // Ordering
         if ("ID".equalsIgnoreCase(orderBy)) {
             wrapper.orderByAsc(Problem::getProblemNo);
         } else if ("DIFFICULTY".equalsIgnoreCase(orderBy)) {
             wrapper.orderByAsc(Problem::getDifficulty).orderByAsc(Problem::getProblemNo);
         } else if ("ACCEPTANCE".equalsIgnoreCase(orderBy)) {
-            // 通过率 = accepted / submit，简单按 acceptedCount 降序
+            // Use accepted count as a simple acceptance proxy.
             wrapper.orderByDesc(Problem::getAcceptedCount);
         } else {
-            // 默认按题号升序
+            // Default to problem number ascending.
             wrapper.orderByAsc(Problem::getProblemNo);
         }
 
-        Page<Problem> result = problemMapper.selectPage(pageParam, wrapper);
-        if (result.getRecords().isEmpty()) {
-            return PageResult.empty(p, s);
+        boolean filterByProgressStatus = userId != null && status != null && !status.isBlank();
+        List<Problem> problems;
+        Map<Long, String> statusMap;
+        long total;
+        if (filterByProgressStatus) {
+            List<Problem> allProblems = problemMapper.selectList(wrapper);
+            if (allProblems.isEmpty()) {
+                return PageResult.empty(p, s);
+            }
+
+            statusMap = loadProblemStatusMap(userId, allProblems.stream().map(Problem::getId).toList());
+            String expected = status.trim();
+            List<Problem> filteredProblems = allProblems.stream()
+                    .filter(problem -> expected.equals(statusMap.getOrDefault(problem.getId(), PROGRESS_UNSOLVED)))
+                    .toList();
+            if (filteredProblems.isEmpty()) {
+                return PageResult.empty(p, s);
+            }
+
+            total = filteredProblems.size();
+            problems = slicePage(filteredProblems, p, s);
+        } else {
+            Page<Problem> pageParam = new Page<>(p, s);
+            Page<Problem> result = problemMapper.selectPage(pageParam, wrapper);
+            if (result.getRecords().isEmpty()) {
+                return PageResult.empty(p, s);
+            }
+
+            problems = result.getRecords();
+            statusMap = loadProblemStatusMap(userId, problems.stream().map(Problem::getId).toList());
+            total = result.getTotal();
         }
 
-        List<Problem> problems = result.getRecords();
+        if (problems.isEmpty()) {
+            return PageResult.of(List.of(), total, p, s);
+        }
+
         List<Long> problemIds = problems.stream().map(Problem::getId).toList();
 
-        // 查询标签
+        // Load tags for the current page.
         List<ProblemTag> problemTags = problemTagMapper.selectList(
                 new LambdaQueryWrapper<ProblemTag>()
                     .in(ProblemTag::getProblemId, problemIds)
@@ -337,37 +366,7 @@ public class ProblemServiceImpl implements ProblemService {
                 )
         );
 
-        // 查询当前用户的做题状态
-        Map<Long, String> statusMap;
-        if (userId != null) {
-            List<UserProblemProgress> progresses = userProblemProgressMapper.selectList(
-                    new LambdaQueryWrapper<UserProblemProgress>()
-                        .eq(UserProblemProgress::getUserId, userId)
-                        .in(UserProblemProgress::getProblemId, problemIds)
-            );
-            statusMap = progresses.stream().collect(
-                    Collectors.toMap(
-                            UserProblemProgress::getProblemId,
-                            UserProblemProgress::getStatus,
-                            (a, b) -> b
-                    )
-            );
-        } else {
-            statusMap = Map.of();
-        }
-
-        // 根据 status 参数再过滤一层（仅对已登录用户生效）
-        final List<Problem> filteredProblems;
-        if (userId != null && status != null && !status.isBlank()) {
-            String expected = status.trim();
-            filteredProblems = problems.stream()
-                    .filter(p2 -> expected.equals(statusMap.getOrDefault(p2.getId(), PROGRESS_UNSOLVED)))
-                    .toList();
-        } else {
-            filteredProblems = problems;
-        }
-
-        List<ProblemListItemVO> listVos = filteredProblems.stream()
+        List<ProblemListItemVO> listVos = problems.stream()
                 .map(p2 -> {
                     ProblemListItemVO vo = new ProblemListItemVO();
                     vo.setId(p2.getId());
@@ -397,7 +396,7 @@ public class ProblemServiceImpl implements ProblemService {
                 })
                 .toList();
 
-        return PageResult.of(listVos, result.getTotal(), result.getCurrent(), result.getSize());
+        return PageResult.of(listVos, total, p, s);
     }
 
     @Override
@@ -600,6 +599,35 @@ public class ProblemServiceImpl implements ProblemService {
         } catch (NumberFormatException ignored) {
             return null;
         }
+    }
+
+    private Map<Long, String> loadProblemStatusMap(Long userId, List<Long> problemIds) {
+        if (userId == null || problemIds.isEmpty()) {
+            return Map.of();
+        }
+
+        List<UserProblemProgress> progresses = userProblemProgressMapper.selectList(
+                new LambdaQueryWrapper<UserProblemProgress>()
+                        .eq(UserProblemProgress::getUserId, userId)
+                        .in(UserProblemProgress::getProblemId, problemIds)
+        );
+        return progresses.stream().collect(
+                Collectors.toMap(
+                        UserProblemProgress::getProblemId,
+                        UserProblemProgress::getStatus,
+                        (a, b) -> b
+                )
+        );
+    }
+
+    private List<Problem> slicePage(List<Problem> problems, int page, int size) {
+        int fromIndex = Math.max((page - 1) * size, 0);
+        if (fromIndex >= problems.size()) {
+            return List.of();
+        }
+
+        int toIndex = Math.min(fromIndex + size, problems.size());
+        return problems.subList(fromIndex, toIndex);
     }
 
     private List<TagVO> loadTagVos(Long problemId) {

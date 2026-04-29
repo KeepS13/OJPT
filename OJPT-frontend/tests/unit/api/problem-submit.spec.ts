@@ -1,19 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { postMock } = vi.hoisted(() => ({
+const { getMock, postMock } = vi.hoisted(() => ({
+  getMock: vi.fn(),
   postMock: vi.fn(),
 }))
 
 vi.mock('@/api/request', () => ({
   default: {
+    get: getMock,
     post: postMock,
   },
 }))
 
-import { submitProblemCode } from '../../../src/api/problem'
+import { getProblemSubmissionResult, submitProblemCode } from '../../../src/api/problem'
 
 describe('problem submit api', () => {
   beforeEach(() => {
+    getMock.mockReset()
     postMock.mockReset()
   })
 
@@ -35,5 +38,13 @@ describe('problem submit api', () => {
         timeout: 60000,
       },
     )
+  })
+
+  it('gets submission result from /problems/submissions/{submissionId}', async () => {
+    getMock.mockResolvedValue({ data: {} })
+
+    await getProblemSubmissionResult(9001)
+
+    expect(getMock).toHaveBeenCalledWith('/problems/submissions/9001')
   })
 })

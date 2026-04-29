@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, type Component } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
-import { UserFilled, Lock, Document } from '@element-plus/icons-vue'
+import { UserFilled, Lock, Document, Histogram } from '@element-plus/icons-vue'
 import UserAvatar from '@/components/common/UserAvatar.vue'
 import { useAuth } from '@/hooks/useAuth'
 
@@ -12,7 +12,7 @@ const displayName = computed(() => {
   return user.value?.username || user.value?.email || ''
 })
 
-type MenuIconName = 'profile' | 'security' | 'submissions'
+type MenuIconName = 'profile' | 'security' | 'submissions' | 'training'
 
 interface MenuItem {
   path: string
@@ -25,6 +25,7 @@ const iconMap: Record<MenuIconName, Component> = {
   profile: UserFilled,
   security: Lock,
   submissions: Document,
+  training: Histogram,
 }
 
 const getIcon = (name: MenuIconName): Component => {
@@ -33,6 +34,7 @@ const getIcon = (name: MenuIconName): Component => {
 
 const menuItems: MenuItem[] = [
   { path: '/profile', label: '个人资料', iconName: 'profile' },
+  { path: '/profile/training', label: '训练看板', iconName: 'training' },
   { path: '/profile/submissions', label: '解题记录', iconName: 'submissions' },
   { path: '/profile/security', label: '账号安全', iconName: 'security' },
 ]

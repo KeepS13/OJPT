@@ -10,10 +10,12 @@ import com.example.ojpt.dto.UsernameUpdateDTO;
 import com.example.ojpt.exception.BusinessException;
 import com.example.ojpt.security.LoginUserDetails;
 import com.example.ojpt.service.SubmissionService;
+import com.example.ojpt.service.TrainingDashboardService;
 import com.example.ojpt.service.UserService;
 import com.example.ojpt.vo.CurrentUserVO;
 import com.example.ojpt.vo.UserSubmissionRecordVO;
 import com.example.ojpt.vo.UserDetailVO;
+import com.example.ojpt.vo.training.dashboard.UserTrainingDashboardVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -45,6 +47,7 @@ public class UserController {
 
     private final UserService userService;
     private final SubmissionService submissionService;
+    private final TrainingDashboardService trainingDashboardService;
 
     // 单个头像文件最大 1MB（前端已压缩为 320x320 webp，这里做安全兜底）
     private static final long MAX_AVATAR_SIZE_BYTES = 1 * 1024 * 1024;
@@ -122,14 +125,25 @@ public class UserController {
     @GetMapping("/me/submissions")
     @Operation(summary = "获取当前用户解题记录", description = "分页获取当前登录用户的历史代码提交与结果")
     public Result<PageResult<UserSubmissionRecordVO>> getCurrentUserSubmissions(
-            @RequestParam(required = false, defaultValue = "1") Integer page,
-            @RequestParam(required = false, defaultValue = "10") Integer size) {
+            @RequestParam(value = "page", required = false, defaultValue = "1") Integer page,
+            @RequestParam(value = "size", required = false, defaultValue = "10") Integer size) {
         Long userId = getCurrentUserId();
         if (userId == null) {
             throw BusinessException.unauthorized("未登录或登录状态已失效");
         }
 
         return Result.ok(submissionService.getCurrentUserSubmissions(userId, page, size));
+    }
+
+    @GetMapping("/me/training-dashboard")
+    @Operation(summary = "获取当前用户训练看板", description = "聚合返回当前用户的训练统计、最近提交和状态分布")
+    public Result<UserTrainingDashboardVO> getCurrentUserTrainingDashboard() {
+        Long userId = getCurrentUserId();
+        if (userId == null) {
+            throw BusinessException.unauthorized("鏈櫥褰曟垨鐧诲綍鐘舵€佸凡澶辨晥");
+        }
+
+        return Result.ok(trainingDashboardService.getTrainingDashboard(userId));
     }
 
     /**
@@ -259,4 +273,3 @@ public class UserController {
         return null;
     }
 }
-

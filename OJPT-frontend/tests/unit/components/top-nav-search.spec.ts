@@ -34,6 +34,25 @@ vi.mock('@/hooks/useAuth', () => ({
   }),
 }))
 
+vi.mock('@/components/auth/LoginDialog.vue', () => ({
+  default: defineComponent({
+    props: {
+      modelValue: {
+        type: Boolean,
+        default: false,
+      },
+    },
+    emits: ['update:modelValue'],
+    template: '<div />',
+  }),
+}))
+
+vi.mock('@/components/common/UserAvatar.vue', () => ({
+  default: defineComponent({
+    template: '<div />',
+  }),
+}))
+
 import TopNav from '@/components/layout/TopNav.vue'
 
 describe('TopNav search', () => {

@@ -115,6 +115,10 @@ export function submitProblemCode(
   })
 }
 
+export function getProblemSubmissionResult(submissionId: string | number) {
+  return request.get<ProblemCodeSubmissionResult>(`/problems/submissions/${submissionId}`)
+}
+
 export function runProblemCode(payload: ProblemCodeRunPayload) {
   return request.post<ProblemCodeRunResult>('/problems/run', payload, {
     timeout: JUDGE_REQUEST_TIMEOUT_MS,

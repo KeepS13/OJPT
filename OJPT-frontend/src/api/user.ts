@@ -6,6 +6,32 @@ export function getCurrentUserDetail() {
   return request.get<UserDetail>('/users/me/detail')
 }
 
+export interface TrainingDashboardRecentSubmission {
+  submissionId: string
+  problemId: string
+  problemNo?: number | null
+  problemTitle?: string | null
+  language: string
+  status: string
+  timeMs?: number | null
+  memoryKb?: number | null
+  createdAt: string
+}
+
+export interface UserTrainingDashboard {
+  totalSubmissions: number
+  acceptedSubmissions: number
+  solvedProblemCount: number
+  acceptanceRate: number
+  recentSubmissions: TrainingDashboardRecentSubmission[]
+  statusDistribution: Record<string, number>
+  difficultyDistribution: Record<string, number>
+}
+
+export function getCurrentUserTrainingDashboard() {
+  return request.get<UserTrainingDashboard>('/users/me/training-dashboard')
+}
+
 export interface UserSubmissionRecord {
   submissionId: string
   problemId: string
