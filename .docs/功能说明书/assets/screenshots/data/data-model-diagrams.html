@@ -1,0 +1,607 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OJPT 数据模型与业务状态图</title>
+  <style>
+    :root {
+      --ink: #172033;
+      --muted: #5d667a;
+      --line: #cfd7e6;
+      --bg: #f6f8fb;
+      --panel: #ffffff;
+      --blue: #2f6fed;
+      --green: #17845b;
+      --amber: #b96a00;
+      --red: #c2413a;
+      --violet: #7057d2;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Microsoft YaHei", "Segoe UI", Arial, sans-serif;
+    }
+
+    main {
+      width: 1440px;
+      padding: 32px;
+    }
+
+    section.diagram {
+      width: 1376px;
+      min-height: 760px;
+      margin: 0 0 32px;
+      padding: 28px;
+      background: var(--panel);
+      border: 1px solid #e3e8f2;
+      border-radius: 8px;
+      box-shadow: 0 14px 40px rgba(23, 32, 51, 0.08);
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      font-size: 30px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    .source {
+      margin: 0 0 22px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .model-grid {
+      display: grid;
+      gap: 18px;
+      align-items: start;
+    }
+
+    .user-grid {
+      grid-template-columns: 1fr 1fr 1fr;
+    }
+
+    .bank-grid {
+      grid-template-columns: 1fr 1fr 1fr 1fr;
+    }
+
+    .submit-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .table-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #fff;
+    }
+
+    .table-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 14px;
+      color: #fff;
+      font-weight: 700;
+      font-size: 17px;
+      background: #28354f;
+    }
+
+    .table-title span {
+      font-size: 12px;
+      font-weight: 500;
+      opacity: 0.88;
+    }
+
+    .table-card.blue .table-title { background: var(--blue); }
+    .table-card.green .table-title { background: var(--green); }
+    .table-card.amber .table-title { background: var(--amber); }
+    .table-card.red .table-title { background: var(--red); }
+    .table-card.violet .table-title { background: var(--violet); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    td {
+      padding: 8px 10px;
+      border-top: 1px solid #eef2f7;
+      vertical-align: top;
+      line-height: 1.28;
+    }
+
+    td:first-child {
+      width: 42%;
+      color: #26334d;
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    td:last-child {
+      color: #536078;
+      overflow-wrap: anywhere;
+    }
+
+    .submit-grid td:first-child {
+      width: 28%;
+    }
+
+    .edges {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    .edge {
+      padding: 12px 14px;
+      border: 1px dashed #aab7cc;
+      border-radius: 8px;
+      background: #fbfcff;
+      color: #30405f;
+      font-size: 14px;
+      line-height: 1.35;
+    }
+
+    .edge strong {
+      display: block;
+      margin-bottom: 3px;
+      color: #1f2a40;
+      font-family: Consolas, "Cascadia Mono", monospace;
+    }
+
+    .state-wrap {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+
+    .flow-card {
+      min-height: 310px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .flow-card h2 {
+      margin: 0 0 16px;
+      font-size: 19px;
+    }
+
+    .flow {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      min-height: 72px;
+    }
+
+    .node {
+      min-width: 118px;
+      padding: 12px 14px;
+      border-radius: 7px;
+      color: #fff;
+      text-align: center;
+      font-weight: 700;
+      box-shadow: inset 0 -1px rgba(0, 0, 0, 0.16);
+    }
+
+    .node small {
+      display: block;
+      margin-top: 4px;
+      font-size: 12px;
+      font-weight: 500;
+      opacity: 0.92;
+    }
+
+    .arrow {
+      color: #7b879b;
+      font-size: 24px;
+      line-height: 1;
+    }
+
+    .stack {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .note {
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .status-ok { background: var(--green); }
+    .status-warn { background: var(--amber); }
+    .status-stop { background: var(--red); }
+    .status-run { background: var(--blue); }
+    .status-dim { background: #667085; }
+    .status-violet { background: var(--violet); }
+
+    .schema-table {
+      width: 100%;
+      margin-top: 8px;
+      font-size: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .schema-row {
+      display: grid;
+      grid-template-columns: 280px 1fr 180px 180px;
+      border-top: 1px solid #edf1f7;
+    }
+
+    .schema-row:first-child {
+      border-top: 0;
+      background: #28354f;
+      color: #fff;
+      font-weight: 700;
+    }
+
+    .schema-cell {
+      padding: 12px 14px;
+      border-left: 1px solid #edf1f7;
+      line-height: 1.35;
+    }
+
+    .schema-row:first-child .schema-cell {
+      border-left-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .schema-cell:first-child {
+      border-left: 0;
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+<main>
+  <section id="user-model" class="diagram">
+    <h1>用户与资料模型关系图</h1>
+    <p class="source">来源：Flyway V1_0 用户、角色、资料表；V1_1 password_reset_request 表。</p>
+    <div class="model-grid user-grid">
+      <article class="table-card blue">
+        <div class="table-title">user <span>用户账号主体</span></div>
+        <table>
+          <tr><td>id</td><td>BIGINT UNSIGNED PK</td></tr>
+          <tr><td>username</td><td>VARCHAR(64)，登录名</td></tr>
+          <tr><td>password</td><td>VARCHAR(255)，BCrypt 密码</td></tr>
+          <tr><td>email</td><td>VARCHAR(128)，唯一</td></tr>
+          <tr><td>phone</td><td>VARCHAR(32)，唯一</td></tr>
+          <tr><td>status</td><td>TINYINT：0/1/2</td></tr>
+          <tr><td>role_type</td><td>ENUM：USER / ADMIN</td></tr>
+          <tr><td>is_deleted</td><td>TINYINT 逻辑删除</td></tr>
+          <tr><td>created_at</td><td>DATETIME</td></tr>
+          <tr><td>updated_at</td><td>DATETIME</td></tr>
+        </table>
+      </article>
+      <article class="table-card green">
+        <div class="table-title">user_profile <span>扩展资料，1:1</span></div>
+        <table>
+          <tr><td>id</td><td>BIGINT UNSIGNED PK</td></tr>
+          <tr><td>user_id</td><td>BIGINT UNSIGNED，唯一</td></tr>
+          <tr><td>gender</td><td>TINYINT：0未知/1男/2女</td></tr>
+          <tr><td>birthday</td><td>DATE</td></tr>
+          <tr><td>website</td><td>VARCHAR(255)</td></tr>
+          <tr><td>github</td><td>VARCHAR(128)</td></tr>
+          <tr><td>student_no</td><td>VARCHAR(64)</td></tr>
+          <tr><td>school_id</td><td>BIGINT UNSIGNED</td></tr>
+          <tr><td>identity_status</td><td>TINYINT</td></tr>
+          <tr><td>bio / tags</td><td>VARCHAR(255)</td></tr>
+        </table>
+      </article>
+      <article class="table-card amber">
+        <div class="table-title">password_reset_request <span>密码重置审批</span></div>
+        <table>
+          <tr><td>id</td><td>BIGINT UNSIGNED PK</td></tr>
+          <tr><td>user_id</td><td>BIGINT UNSIGNED，目标用户</td></tr>
+          <tr><td>account_identifier</td><td>VARCHAR(128)</td></tr>
+          <tr><td>status</td><td>ENUM：PENDING/APPROVED/REJECTED</td></tr>
+          <tr><td>reviewed_by</td><td>BIGINT UNSIGNED，管理员</td></tr>
+          <tr><td>reviewed_at</td><td>DATETIME</td></tr>
+          <tr><td>created_at</td><td>DATETIME</td></tr>
+          <tr><td>updated_at</td><td>DATETIME</td></tr>
+        </table>
+      </article>
+      <article class="table-card violet">
+        <div class="table-title">role <span>角色定义</span></div>
+        <table>
+          <tr><td>id</td><td>BIGINT UNSIGNED PK</td></tr>
+          <tr><td>code</td><td>VARCHAR(64)，唯一</td></tr>
+          <tr><td>name</td><td>VARCHAR(128)</td></tr>
+          <tr><td>description</td><td>VARCHAR(255)</td></tr>
+          <tr><td>level</td><td>INT</td></tr>
+        </table>
+      </article>
+      <article class="table-card violet">
+        <div class="table-title">user_role <span>用户-角色多对多</span></div>
+        <table>
+          <tr><td>id</td><td>BIGINT UNSIGNED PK</td></tr>
+          <tr><td>user_id</td><td>BIGINT UNSIGNED</td></tr>
+          <tr><td>role_id</td><td>BIGINT UNSIGNED</td></tr>
+          <tr><td>bind_source</td><td>VARCHAR(64)</td></tr>
+          <tr><td>uk_user_role</td><td>user_id + role_id 唯一</td></tr>
+        </table>
+      </article>
+    </div>
+    <div class="edges">
+      <div class="edge"><strong>user.id 1 → 1 user_profile.user_id</strong>唯一索引 uk_user_profile_user 保持一个账号一份资料。</div>
+      <div class="edge"><strong>user.id 1 → N password_reset_request.user_id</strong>同一用户可有历史申请；服务层限制同一用户只有一个 PENDING。</div>
+      <div class="edge"><strong>user.id N ↔ N role.id</strong>通过 user_role 关联，当前种子角色为 USER、ADMIN。</div>
+    </div>
+  </section>
+
+  <section id="problem-model" class="diagram">
+    <h1>题库模型关系图</h1>
+    <p class="source">来源：Flyway V1_0 problem、tag、problem_tag、problem_test_case 表。</p>
+    <div class="model-grid bank-grid">
+      <article class="table-card blue">
+        <div class="table-title">problem <span>题目主表</span></div>
+        <table>
+          <tr><td>id</td><td>BIGINT UNSIGNED PK</td></tr>
+          <tr><td>problem_no</td><td>INT UNSIGNED AUTO_INCREMENT</td></tr>
+          <tr><td>title</td><td>VARCHAR(255)</td></tr>
+          <tr><td>difficulty</td><td>EASY / MEDIUM / HARD</td></tr>
+          <tr><td>statement_md</td><td>LONGTEXT</td></tr>
+          <tr><td>time_limit_ms</td><td>INT</td></tr>
+          <tr><td>memory_limit_kb</td><td>INT</td></tr>
+          <tr><td>status</td><td>DRAFT / PUBLISHED / ARCHIVED</td></tr>
+          <tr><td>submit_count</td><td>BIGINT UNSIGNED</td></tr>
+          <tr><td>accepted_count</td><td>BIGINT UNSIGNED</td></tr>
+        </table>
+      </article>
+      <article class="table-card violet">
+        <div class="table-title">problem_tag <span>题目-标签关联</span></div>
+        <table>
+          <tr><td>id</td><td>BIGINT UNSIGNED PK</td></tr>
+          <tr><td>problem_id</td><td>BIGINT UNSIGNED</td></tr>
+          <tr><td>tag_id</td><td>BIGINT UNSIGNED</td></tr>
+          <tr><td>uk_problem_tag</td><td>problem_id + tag_id 唯一</td></tr>
+          <tr><td>created_at</td><td>DATETIME</td></tr>
+        </table>
+      </article>
+      <article class="table-card green">
+        <div class="table-title">tag <span>题目标签</span></div>
+        <table>
+          <tr><td>id</td><td>BIGINT UNSIGNED PK</td></tr>
+          <tr><td>name</td><td>VARCHAR(64)，唯一</td></tr>
+          <tr><td>type</td><td>VARCHAR(32)：ALGO/DS/GRAPH 等</td></tr>
+          <tr><td>created_at</td><td>DATETIME</td></tr>
+          <tr><td>updated_at</td><td>DATETIME</td></tr>
+        </table>
+      </article>
+      <article class="table-card amber">
+        <div class="table-title">problem_test_case <span>测试用例</span></div>
+        <table>
+          <tr><td>id</td><td>BIGINT UNSIGNED PK</td></tr>
+          <tr><td>problem_id</td><td>BIGINT UNSIGNED</td></tr>
+          <tr><td>case_type</td><td>SAMPLE / HIDDEN</td></tr>
+          <tr><td>sort_order</td><td>INT</td></tr>
+          <tr><td>input_text</td><td>LONGTEXT</td></tr>
+          <tr><td>expected_output</td><td>LONGTEXT</td></tr>
+          <tr><td>explanation</td><td>VARCHAR(500)</td></tr>
+        </table>
+      </article>
+    </div>
+    <div class="edges">
+      <div class="edge"><strong>problem.id 1 → N problem_tag.problem_id</strong>一个题目可绑定多个标签。</div>
+      <div class="edge"><strong>tag.id 1 → N problem_tag.tag_id</strong>一个标签可复用到多道题。</div>
+      <div class="edge"><strong>problem.id 1 → N problem_test_case.problem_id</strong>测试用例按 case_type 与 sort_order 排序。</div>
+    </div>
+  </section>
+
+  <section id="submission-model" class="diagram">
+    <h1>做题提交模型关系图</h1>
+    <p class="source">来源：Flyway V1_0 problem_code_draft、submission、submission_case_result、user_problem_progress 表；关联 user/problem。</p>
+    <div class="model-grid submit-grid">
+      <article class="table-card green">
+        <div class="table-title">problem_code_draft <span>代码草稿</span></div>
+        <table>
+          <tr><td>id</td><td>BIGINT UNSIGNED PK</td></tr>
+          <tr><td>user_id</td><td>BIGINT UNSIGNED</td></tr>
+          <tr><td>problem_id</td><td>BIGINT UNSIGNED</td></tr>
+          <tr><td>language</td><td>VARCHAR(32)</td></tr>
+          <tr><td>source_code</td><td>LONGTEXT</td></tr>
+          <tr><td>uk_draft</td><td>user + problem + language 唯一</td></tr>
+          <tr><td>updated_at</td><td>DATETIME</td></tr>
+        </table>
+      </article>
+      <article class="table-card blue">
+        <div class="table-title">submission <span>正式提交</span></div>
+        <table>
+          <tr><td>id</td><td>BIGINT UNSIGNED PK</td></tr>
+          <tr><td>user_id</td><td>BIGINT UNSIGNED</td></tr>
+          <tr><td>problem_id</td><td>BIGINT UNSIGNED</td></tr>
+          <tr><td>language</td><td>VARCHAR(32)</td></tr>
+          <tr><td>source_code</td><td>MEDIUMTEXT</td></tr>
+          <tr><td>status</td><td>QUEUED/RUNNING/AC/WA/TLE/MLE/RE/CE/SYSTEM_ERROR</td></tr>
+          <tr><td>time_ms</td><td>INT</td></tr>
+          <tr><td>memory_kb</td><td>INT</td></tr>
+          <tr><td>created_at</td><td>DATETIME</td></tr>
+        </table>
+      </article>
+      <article class="table-card amber">
+        <div class="table-title">submission_case_result <span>逐用例结果</span></div>
+        <table>
+          <tr><td>id</td><td>BIGINT UNSIGNED PK</td></tr>
+          <tr><td>submission_id</td><td>BIGINT UNSIGNED</td></tr>
+          <tr><td>case_type</td><td>SAMPLE/HIDDEN/CUSTOM</td></tr>
+          <tr><td>case_index</td><td>INT</td></tr>
+          <tr><td>input_text</td><td>LONGTEXT</td></tr>
+          <tr><td>expected_output</td><td>LONGTEXT</td></tr>
+          <tr><td>actual_output</td><td>LONGTEXT</td></tr>
+          <tr><td>error_output</td><td>LONGTEXT</td></tr>
+          <tr><td>status</td><td>AC/WA/TLE/MLE/RE/CE/SYSTEM_ERROR</td></tr>
+        </table>
+      </article>
+      <article class="table-card red">
+        <div class="table-title">user_problem_progress <span>用户题目进度</span></div>
+        <table>
+          <tr><td>id</td><td>BIGINT UNSIGNED PK</td></tr>
+          <tr><td>user_id</td><td>BIGINT UNSIGNED</td></tr>
+          <tr><td>problem_id</td><td>BIGINT UNSIGNED</td></tr>
+          <tr><td>status</td><td>UNSOLVED/ATTEMPTED/SOLVED</td></tr>
+          <tr><td>last_submission_id</td><td>BIGINT UNSIGNED</td></tr>
+          <tr><td>uk_user_problem</td><td>user_id + problem_id 唯一</td></tr>
+          <tr><td>updated_at</td><td>DATETIME</td></tr>
+        </table>
+      </article>
+    </div>
+    <div class="edges">
+      <div class="edge"><strong>user + problem 1 → N submission</strong>提交记录按 user_id、problem_id、created_at 建索引。</div>
+      <div class="edge"><strong>submission.id 1 → N submission_case_result.submission_id</strong>每次提交保留逐用例运行结果。</div>
+      <div class="edge"><strong>user + problem 1 → 1 user_problem_progress</strong>进度表保存最近提交与题目完成状态。</div>
+    </div>
+  </section>
+
+  <section id="state-flow" class="diagram">
+    <h1>业务状态流转图</h1>
+    <p class="source">来源：migration ENUM、entity 注释、ProblemServiceImpl、SubmissionServiceImpl、PasswordResetRequestServiceImpl。</p>
+    <div class="state-wrap">
+      <article class="flow-card">
+        <h2>用户状态 user.status</h2>
+        <div class="flow">
+          <div class="node status-warn">2<small>待审核</small></div>
+          <span class="arrow">→</span>
+          <div class="node status-ok">1<small>启用</small></div>
+          <span class="arrow">↔</span>
+          <div class="node status-stop">0<small>禁用/注销</small></div>
+        </div>
+        <p class="note">AdminController 限定 status 取值 0-2；AuthController 对待审核账号在密码校验后拦截；UserService 删除账号时将 status 置为 0。</p>
+      </article>
+      <article class="flow-card">
+        <h2>题目状态 problem.status</h2>
+        <div class="flow">
+          <div class="node status-dim">DRAFT<small>草稿</small></div>
+          <span class="arrow">→</span>
+          <div class="node status-ok">PUBLISHED<small>已发布</small></div>
+          <span class="arrow">→</span>
+          <div class="node status-stop">ARCHIVED<small>已归档</small></div>
+        </div>
+        <p class="note">ProblemServiceImpl#createDraft 创建 DRAFT；publishProblem 改为 PUBLISHED；archiveProblem 改为 ARCHIVED。做题提交只允许 PUBLISHED 题目。</p>
+      </article>
+      <article class="flow-card">
+        <h2>提交状态 submission.status</h2>
+        <div class="flow">
+          <div class="node status-dim">QUEUED<small>排队</small></div>
+          <span class="arrow">→</span>
+          <div class="node status-run">RUNNING<small>判题中</small></div>
+          <span class="arrow">→</span>
+        </div>
+        <div class="stack">
+          <div class="node status-ok">AC<small>通过</small></div>
+          <div class="node status-warn">WA<small>答案错误</small></div>
+          <div class="node status-warn">TLE<small>超时</small></div>
+          <div class="node status-warn">MLE<small>内存超限</small></div>
+          <div class="node status-stop">RE<small>运行错误</small></div>
+          <div class="node status-stop">CE<small>编译错误</small></div>
+          <div class="node status-stop">SYSTEM_ERROR<small>系统错误</small></div>
+        </div>
+        <p class="note">源码和数据库实际状态为 RUNNING，不是 JUDGING；最终状态由逐用例结果归并。</p>
+      </article>
+      <article class="flow-card">
+        <h2>密码重置状态 password_reset_request.status</h2>
+        <div class="flow">
+          <div class="node status-dim">PENDING<small>待审核</small></div>
+          <span class="arrow">→</span>
+          <div class="node status-ok">APPROVED<small>已批准</small></div>
+          <span class="arrow">或</span>
+          <div class="node status-stop">REJECTED<small>已拒绝</small></div>
+        </div>
+        <p class="note">PasswordResetRequestServiceImpl 只允许从 PENDING 审核为 APPROVED 或 REJECTED；审核后记录 reviewed_by、reviewed_at。</p>
+      </article>
+    </div>
+  </section>
+
+  <section id="table-list" class="diagram">
+    <h1>核心表结构清单</h1>
+    <p class="source">来源：Flyway migration 中与当前个人算法训练主线直接相关的表。</p>
+    <div class="schema-table">
+      <div class="schema-row">
+        <div class="schema-cell">表名</div>
+        <div class="schema-cell">职责</div>
+        <div class="schema-cell">主状态字段</div>
+        <div class="schema-cell">关键约束/索引</div>
+      </div>
+      <div class="schema-row">
+        <div class="schema-cell">user</div>
+        <div class="schema-cell">账号、登录凭据、角色类型、启停状态。</div>
+        <div class="schema-cell">status, role_type</div>
+        <div class="schema-cell">uk_email, uk_phone</div>
+      </div>
+      <div class="schema-row">
+        <div class="schema-cell">user_profile</div>
+        <div class="schema-cell">性别、生日、网站、GitHub、学校、技能、简介等扩展资料。</div>
+        <div class="schema-cell">identity_status</div>
+        <div class="schema-cell">uk_user_profile_user</div>
+      </div>
+      <div class="schema-row">
+        <div class="schema-cell">password_reset_request</div>
+        <div class="schema-cell">用户找回密码的管理员审批申请。</div>
+        <div class="schema-cell">status</div>
+        <div class="schema-cell">idx_user_status</div>
+      </div>
+      <div class="schema-row">
+        <div class="schema-cell">problem</div>
+        <div class="schema-cell">题目题号、题面、难度、限制、发布状态和统计字段。</div>
+        <div class="schema-cell">status, difficulty</div>
+        <div class="schema-cell">uk_problem_no</div>
+      </div>
+      <div class="schema-row">
+        <div class="schema-cell">tag / problem_tag</div>
+        <div class="schema-cell">标签定义与题目标签多对多关系。</div>
+        <div class="schema-cell">type</div>
+        <div class="schema-cell">uk_tag_name, uk_problem_tag</div>
+      </div>
+      <div class="schema-row">
+        <div class="schema-cell">problem_test_case</div>
+        <div class="schema-cell">公开样例与隐藏判题用例。</div>
+        <div class="schema-cell">case_type</div>
+        <div class="schema-cell">idx_problem_case</div>
+      </div>
+      <div class="schema-row">
+        <div class="schema-cell">submission</div>
+        <div class="schema-cell">用户正式提交源码、判题状态、耗时和内存。</div>
+        <div class="schema-cell">status</div>
+        <div class="schema-cell">idx_user_problem</div>
+      </div>
+      <div class="schema-row">
+        <div class="schema-cell">submission_case_result</div>
+        <div class="schema-cell">每次提交的逐用例判题输出和结果。</div>
+        <div class="schema-cell">status, case_type</div>
+        <div class="schema-cell">idx_submission_case</div>
+      </div>
+      <div class="schema-row">
+        <div class="schema-cell">problem_code_draft</div>
+        <div class="schema-cell">用户在题目和语言维度上的代码草稿。</div>
+        <div class="schema-cell">无</div>
+        <div class="schema-cell">uk_user_problem_lang</div>
+      </div>
+      <div class="schema-row">
+        <div class="schema-cell">user_problem_progress</div>
+        <div class="schema-cell">用户对每道题的解决进度和最近一次提交。</div>
+        <div class="schema-cell">status</div>
+        <div class="schema-cell">uk_user_problem</div>
+      </div>
+    </div>
+  </section>
+</main>
+</body>
+</html>
