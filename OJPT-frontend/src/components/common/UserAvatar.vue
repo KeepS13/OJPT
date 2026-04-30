@@ -46,7 +46,7 @@ const initials = computed(() => {
 
 const avatarUrl = computed(() => {
   if (!props.avatar) return null
-  return props.avatar.startsWith('http') ? props.avatar : `http://localhost${props.avatar}`
+  return props.avatar
 })
 
 const avatarGradient = computed(() => {

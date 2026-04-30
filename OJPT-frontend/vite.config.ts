@@ -29,7 +29,7 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: 'C:\\Program Files\\nginx-1.28.0\\html',
+    outDir: 'dist',
     emptyOutDir: true, // Clear output dir before build.
     rollupOptions: {
       output: {

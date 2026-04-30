@@ -15,6 +15,8 @@ import com.example.ojpt.mapper.UserProblemProgressMapper;
 import com.example.ojpt.service.impl.SubmissionServiceImpl;
 import com.example.ojpt.vo.SubmissionCreateResultVO;
 import org.junit.jupiter.api.Test;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.List;
 import java.util.concurrent.Executor;
@@ -400,5 +402,63 @@ class SubmissionCreationServiceTest {
 
         verify(codeExecutionService, times(1)).execute(any(), any(), any(), any(), any());
         verify(caseResultMapper, times(1)).insert(any());
+    }
+
+    @Test
+    void createSubmission_defersBackgroundJudgeUntilCurrentTransactionCommits() {
+        SubmissionMapper submissionMapper = mock(SubmissionMapper.class);
+        ProblemMapper problemMapper = mock(ProblemMapper.class);
+        UserProblemProgressMapper progressMapper = mock(UserProblemProgressMapper.class);
+        ProblemTestCaseMapper judgeCaseMapper = mock(ProblemTestCaseMapper.class);
+        SubmissionCaseResultMapper caseResultMapper = mock(SubmissionCaseResultMapper.class);
+        CodeExecutionService codeExecutionService = mock(CodeExecutionService.class);
+        AtomicReference<Runnable> queuedTask = new AtomicReference<>();
+        Executor judgeExecutor = queuedTask::set;
+        SubmissionService service = new SubmissionServiceImpl(
+                submissionMapper,
+                problemMapper,
+                progressMapper,
+                judgeCaseMapper,
+                caseResultMapper,
+                codeExecutionService,
+                judgeExecutor
+        );
+
+        Problem problem = new Problem()
+                .setId(2100000000000000004L)
+                .setProblemNo(4)
+                .setStatus("PUBLISHED")
+                .setSubmitCount(0L)
+                .setAcceptedCount(0L)
+                .setTimeLimitMs(1000)
+                .setMemoryLimitKb(256000);
+        when(problemMapper.selectOne(any())).thenReturn(problem);
+        when(progressMapper.selectOne(any())).thenReturn(null);
+        doAnswer(invocation -> {
+            Submission submission = invocation.getArgument(0);
+            submission.setId(2300000000000000013L);
+            return 1;
+        }).when(submissionMapper).insert(any(Submission.class));
+
+        SubmissionCreateDTO dto = new SubmissionCreateDTO();
+        dto.setLanguage("Python3");
+        dto.setSourceCode("print(3)");
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            SubmissionCreateResultVO result = service.createSubmission(1001L, 4, dto);
+
+            assertEquals(2300000000000000013L, result.getSubmissionId());
+            assertEquals("QUEUED", result.getStatus());
+            assertNull(queuedTask.get());
+
+            List<TransactionSynchronization> synchronizations = TransactionSynchronizationManager.getSynchronizations();
+            assertEquals(1, synchronizations.size());
+            synchronizations.get(0).afterCommit();
+
+            assertNotNull(queuedTask.get());
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 }

@@ -1,5 +1,5 @@
 import request from './request'
-import type { LoginSuccessPayload, CurrentUser } from '@/types/auth'
+import type { LoginSuccessPayload, CurrentUser, AuthTokens } from '@/types/auth'
 
 export interface LoginPayload {
   account: string
@@ -15,6 +15,7 @@ export interface RegisterPayload {
 }
 
 export type LoginResponse = LoginSuccessPayload
+export type RefreshResponse = AuthTokens
 
 export interface PasswordResetRequestPayload {
   account: string
@@ -37,7 +38,7 @@ export function requestPasswordReset(payload: PasswordResetRequestPayload) {
 }
 
 export function refreshToken(payload: RefreshPayload) {
-  return request.post<LoginResponse>('/auth/refresh', payload)
+  return request.post<RefreshResponse>('/auth/refresh', payload)
 }
 
 export interface LogoutResponse {

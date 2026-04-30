@@ -2,20 +2,23 @@ package com.example.ojpt.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
 
 @Configuration
 public class SubmissionJudgeExecutorConfig {
 
     @Bean(name = "submissionJudgeExecutor")
     public Executor submissionJudgeExecutor() {
-        return Executors.newCachedThreadPool(runnable -> {
-            Thread thread = new Thread(runnable);
-            thread.setName("ojpt-judge-" + thread.getId());
-            thread.setDaemon(true);
-            return thread;
-        });
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(2);
+        executor.setQueueCapacity(20);
+        executor.setThreadNamePrefix("ojpt-judge-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.initialize();
+        return executor;
     }
 }

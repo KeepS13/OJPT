@@ -4,7 +4,7 @@ import { useAuthStore } from '@/stores/auth'
 import { clearTokens, setTokens, getTokens } from '@/utils/storage'
 import { logout as apiLogout, getCurrentUser, refreshToken as apiRefreshToken } from '@/api/auth'
 import { ensureTokenRefreshTimer, stopTokenRefreshTimer } from '@/api/request'
-import type { LoginSuccessPayload } from '@/types/auth'
+import type { CurrentUser, LoginSuccessPayload } from '@/types/auth'
 import type { AxiosError } from 'axios'
 
 let meLoaded = false
@@ -14,6 +14,17 @@ let refreshFromStorageStarted = false
 const authInitializing = ref(false)
 const authReady = ref(false)
 let bootstrapPromise: Promise<void> | null = null
+
+function setCurrentUserProfile(store: ReturnType<typeof useAuthStore>, user: CurrentUser) {
+  store.setUserProfile({
+    userId: typeof user.userId === 'number' ? String(user.userId) : user.userId,
+    username: user.username,
+    email: user.email,
+    avatar: user.avatar && user.avatar.trim() ? user.avatar : null,
+    roleType: user.roleType,
+    roles: user.roles,
+  })
+}
 
 async function bootstrapAuth(store: ReturnType<typeof useAuthStore>) {
   if (bootstrapPromise) {
@@ -35,13 +46,10 @@ async function bootstrapAuth(store: ReturnType<typeof useAuthStore>) {
           refreshFromStorageStarted = true
           try {
             const res = await apiRefreshToken({ refreshToken: cached.refreshToken })
-            const data = {
-              ...res.data,
-              userId:
-                typeof res.data.userId === 'number' ? String(res.data.userId) : res.data.userId,
-            }
-            store.setFromLogin(data)
-            setTokens(data.accessToken, data.refreshToken)
+            store.setTokens(res.data.accessToken, res.data.refreshToken)
+            setTokens(res.data.accessToken, res.data.refreshToken)
+            const meRes = await getCurrentUser()
+            setCurrentUserProfile(store, meRes.data)
             // 自动登录成功后启动定时器
             ensureTokenRefreshTimer()
           } catch (error) {
@@ -64,20 +72,7 @@ async function bootstrapAuth(store: ReturnType<typeof useAuthStore>) {
         meLoaded = true
         try {
           const res = await getCurrentUser()
-          const avatarValue =
-            res.data.avatar && res.data.avatar.trim() ? res.data.avatar : null
-          const userId =
-            typeof res.data.userId === 'number'
-              ? String(res.data.userId)
-              : res.data.userId
-          store.setUserProfile({
-            userId,
-            username: res.data.username,
-            email: res.data.email,
-            avatar: avatarValue,
-            roleType: res.data.roleType,
-            roles: res.data.roles,
-          })
+          setCurrentUserProfile(store, res.data)
         } catch {
           store.clear()
           clearTokens()
@@ -96,11 +91,16 @@ async function bootstrapAuth(store: ReturnType<typeof useAuthStore>) {
   return bootstrapPromise
 }
 
+export function ensureAuthReady() {
+  const store = useAuthStore()
+  return bootstrapAuth(store)
+}
+
 export function useAuth() {
   const store = useAuthStore()
 
   // 启动时进行一次自动登录初始化（access/refresh 恢复 + /auth/me 补全）
-  void bootstrapAuth(store)
+  void ensureAuthReady()
 
   const isAuthed = computed(() => !!store.accessToken)
 
@@ -140,4 +140,3 @@ export function useAuth() {
     logout,
   }
 }
-

@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import { getCurrentUser } from '@/api/auth'
+import { ensureAuthReady } from '@/hooks/useAuth'
 import type { RoleType } from '@/utils/role'
 
 const HomeView = () => import('@/views/HomeView.vue')
@@ -42,6 +43,7 @@ const router = createRouter({
     {
       path: '/profile',
       component: UserCenterLayout,
+      meta: { requiresAuth: true },
       children: [
         {
           path: '',
@@ -107,6 +109,8 @@ const router = createRouter({
 
 // 路由守卫
 router.beforeEach(async (to, from, next) => {
+  await ensureAuthReady()
+
   const authStore = useAuthStore()
   const requiresAuth = to.meta.requiresAuth
   const requiredRole = to.meta.requiredRole as RoleType | undefined

@@ -1,11 +1,12 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
-import { useAuth } from '@/hooks/useAuth'
+import { ensureAuthReady } from '@/hooks/useAuth'
 import { refreshToken } from './auth'
 import { setTokens, clearTokens, getTokens } from '@/utils/storage'
 import { getTokenExpiration } from '@/utils/jwt-utils'
 import type { ApiResponse } from './base'
+import type { AuthTokens, CurrentUser } from '@/types/auth'
 
 // accessToken 有效期 30 分钟，在剩余 5 分钟（即使用 25 分钟后）时主动刷新
 const PROACTIVE_REFRESH_THRESHOLD_MS = 5 * 60 * 1000
@@ -108,6 +109,34 @@ const shouldProactivelyRefresh = (accessToken: string) => {
   return remaining > 0 && remaining <= PROACTIVE_REFRESH_THRESHOLD_MS
 }
 
+const setCurrentUserProfile = (
+  authStore: ReturnType<typeof useAuthStore>,
+  user: CurrentUser
+) => {
+  authStore.setUserProfile({
+    userId: typeof user.userId === 'number' ? String(user.userId) : user.userId,
+    username: user.username,
+    email: user.email,
+    avatar: user.avatar && user.avatar.trim() ? user.avatar : null,
+    roleType: user.roleType,
+    roles: user.roles,
+  })
+}
+
+const loadCurrentUserProfile = async (
+  authStore: ReturnType<typeof useAuthStore>,
+  accessToken: string
+) => {
+  const meRes = await request.get<CurrentUser>('/auth/me', {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  })
+  if (meRes.data) {
+    setCurrentUserProfile(authStore, meRes.data)
+  }
+}
+
 // 后台定时器：定期检查token状态并主动刷新
 const startTokenRefreshTimer = () => {
   if (refreshTimerId) {
@@ -123,13 +152,15 @@ const startTokenRefreshTimer = () => {
 
     if (shouldProactivelyRefresh(authStore.accessToken)) {
       // 触发刷新（复用现有刷新逻辑）
-      performTokenRefresh(authStore)
+      void performTokenRefresh(authStore).catch(() => undefined)
     }
   }, 60 * 1000) // 每分钟检查一次
 }
 
 // 执行token刷新的统一函数
-const performTokenRefresh = async (authStore: ReturnType<typeof useAuthStore>) => {
+const performTokenRefresh = async (
+  authStore: ReturnType<typeof useAuthStore>
+): Promise<AuthTokens | undefined> => {
   if (isRefreshing) return
 
   isRefreshing = true
@@ -144,36 +175,27 @@ const performTokenRefresh = async (authStore: ReturnType<typeof useAuthStore>) =
 
     // 刷新成功后调用 /auth/me 补全/更新用户信息（确保信息最新）
     try {
-      const meRes = await request.get('/auth/me', {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      })
-      if (meRes.data) {
-        const avatarValue = meRes.data.avatar && meRes.data.avatar.trim() ? meRes.data.avatar : null
-        const userId = typeof meRes.data.userId === 'number' ? String(meRes.data.userId) : meRes.data.userId
-        authStore.setUserProfile({
-          userId,
-          username: meRes.data.username,
-          email: meRes.data.email,
-          avatar: avatarValue,
-          roleType: meRes.data.roleType,
-          roles: meRes.data.roles,
-        })
-      }
+      await loadCurrentUserProfile(authStore, accessToken)
     } catch {
       // 获取用户信息失败不影响 token 刷新，静默失败
     }
 
     // 刷新成功后重新启动定时器
     startTokenRefreshTimer()
-  } catch {
+    processQueue(null)
+    processRefreshWaitQueue(null)
+    return res.data
+  } catch (error) {
+    const axiosError = error as AxiosError
+    processQueue(axiosError)
+    processRefreshWaitQueue(axiosError)
     authStore.clear()
     clearTokens()
     if (refreshTimerId) {
       clearInterval(refreshTimerId)
       refreshTimerId = null
     }
+    throw error
   } finally {
     isRefreshing = false
   }
@@ -205,24 +227,13 @@ if (typeof window !== 'undefined') {
 
 request.interceptors.request.use(async (config) => {
   const authStore = useAuthStore()
-  const auth = useAuth()
+  const isRefreshRequest = !!config.url?.includes('/auth/refresh')
+  const isAuthProfileRequest = !!config.url?.includes('/auth/me')
 
-  // 若认证初始化尚未完成（自动登录进行中），等待其结束再继续
-  if (auth.authInitializing) {
-    // bootstrapAuth 在 useAuth 内部已启动，这里仅等待 authReady 变为 true
-    // 简化处理：轮询等待一小段时间（避免引入额外依赖）
-    await new Promise<void>((resolve) => {
-      const check = () => {
-        if (auth.authReady) {
-          resolve()
-        } else {
-          setTimeout(check, 50)
-        }
-      }
-      check()
-    })
+  if (!isRefreshRequest && !isAuthProfileRequest) {
+    await ensureAuthReady()
   }
-  // 若 store 中没有令牌，尝试从本地存储恢复（应对仅保留 refreshToken 的场景）
+
   if (!authStore.accessToken && !authStore.refreshToken) {
     const cached = getTokens()
     if (cached.accessToken || cached.refreshToken) {
@@ -230,25 +241,22 @@ request.interceptors.request.use(async (config) => {
     }
   }
 
-  // 主动刷新：accessToken 剩余时间 <= 29 分钟时，提前刷新，避免业务请求先打到 401
-  // 刷新接口本身不触发主动刷新，避免递归
-  const isRefreshRequest = !!config.url?.includes('/auth/refresh')
-  if (!isRefreshRequest && authStore.accessToken && authStore.refreshToken && shouldProactivelyRefresh(authStore.accessToken)) {
+  if (
+    !isRefreshRequest &&
+    authStore.accessToken &&
+    authStore.refreshToken &&
+    shouldProactivelyRefresh(authStore.accessToken)
+  ) {
     if (isRefreshing) {
-      // 已有刷新在进行，等待完成
       await new Promise<void>((resolve, reject) => {
         refreshWaitQueue.push({ resolve, reject })
       })
     } else {
       await performTokenRefresh(authStore)
-      // 处理等待队列（401 重试队列 + 主动刷新等待队列）
-      processQueue(null)
-      processRefreshWaitQueue(null)
     }
   }
 
-  // 刷新 token 的请求不需要 accessToken
-  if (authStore.accessToken && !config.url?.includes('/auth/refresh')) {
+  if (authStore.accessToken && !isRefreshRequest) {
     config.headers = config.headers || {}
     config.headers.Authorization = `Bearer ${authStore.accessToken}`
   }
@@ -330,48 +338,17 @@ request.interceptors.response.use(
           throw new Error('Refresh token is missing')
         }
         const res = await refreshToken({ refreshToken: refreshTokenValue })
-        const { accessToken, refreshToken: newRefreshToken, ...userData } = res.data
+        const { accessToken, refreshToken: newRefreshToken } = res.data
 
-        // 确保userId是字符串类型（防止精度丢失）
-        const userId = typeof userData.userId === 'number' ? String(userData.userId) : userData.userId
-
-        // 更新 store 和 localStorage
-        authStore.setFromLogin({
-          accessToken,
-          refreshToken: newRefreshToken,
-          ...userData,
-          userId,
-        })
+        authStore.setTokens(accessToken, newRefreshToken)
         setTokens(accessToken, newRefreshToken)
 
         // 刷新 token 成功后，主动调用 /auth/me 获取最新的用户信息（包括头像）
         // 这样可以确保头像信息是最新的，避免刷新 token 响应中头像信息不完整的问题
         // 异步调用，不阻塞当前请求
-        request.get('/auth/me', {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
+        void loadCurrentUserProfile(authStore, accessToken).catch(() => {
+          // 获取用户信息失败不影响 token 刷新，静默失败
         })
-          .then((meRes) => {
-            if (authStore.user && meRes.data) {
-              // 将空字符串头像转换为 null，统一处理
-              const latestAvatar = meRes.data.avatar && meRes.data.avatar.trim() ? meRes.data.avatar : null
-              // 确保userId是字符串类型
-              const userId = typeof meRes.data.userId === 'number' ? String(meRes.data.userId) : meRes.data.userId
-              // 只更新用户信息，不更新 token（token 已经更新过了）
-              authStore.setUserProfile({
-                userId: userId,
-                username: meRes.data.username,
-                email: meRes.data.email,
-                avatar: latestAvatar,
-                roleType: meRes.data.roleType,
-                roles: meRes.data.roles,
-              })
-            }
-          })
-          .catch(() => {
-            // 获取用户信息失败不影响 token 刷新，静默失败
-          })
 
         // 处理等待队列
         processQueue(null)

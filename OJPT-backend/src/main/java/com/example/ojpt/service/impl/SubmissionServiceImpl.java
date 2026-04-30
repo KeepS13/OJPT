@@ -30,6 +30,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.Comparator;
 import java.util.List;
@@ -232,7 +234,7 @@ public class SubmissionServiceImpl implements SubmissionService {
         updateAttemptedProgress(userId, problem.getId(), submission.getId());
 
         if (asynchronousExecution) {
-            judgeExecutor.execute(() -> processQueuedSubmission(submission.getId()));
+            dispatchAfterCommit(() -> processQueuedSubmission(submission.getId()));
             return new SubmissionCreateResultVO(submission.getId(), STATUS_QUEUED, "宸茶繘鍏ュ垽棰樺队鍒?");
         }
 
@@ -269,6 +271,20 @@ public class SubmissionServiceImpl implements SubmissionService {
         }
 
         return result;
+    }
+
+    private void dispatchAfterCommit(Runnable task) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            judgeExecutor.execute(task);
+            return;
+        }
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                judgeExecutor.execute(task);
+            }
+        });
     }
 
     @Override

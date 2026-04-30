@@ -36,6 +36,7 @@ await page.goto(`${backBase}/actuator/health`, { waitUntil: 'networkidle' })
 await capture('overview-03-actuator-health.png')
 
 await page.goto(`${backBase}/swagger-ui/index.html`, { waitUntil: 'networkidle' })
+await page.waitForSelector('.swagger-ui', { timeout: 10000 })
 await capture('overview-04-swagger-ui.png', { delay: 1500 })
 
 await loginAsAdmin()

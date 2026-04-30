@@ -4,6 +4,8 @@ import { ElMessage, ElDialog } from 'element-plus'
 import { getCurrentUserDetail, updateUsername, updateEmail, updatePhone, updatePassword, deleteAccount } from '@/api/user'
 import { useAuth } from '@/hooks/useAuth'
 import { useAuthStore } from '@/stores/auth'
+import { stopTokenRefreshTimer } from '@/api/request'
+import { clearTokens } from '@/utils/storage'
 import { useRouter } from 'vue-router'
 import type { UserDetail } from '@/types/user'
 
@@ -262,7 +264,9 @@ const handleConfirmDelete = async () => {
     ElMessage.success('账号注销成功')
     showSecondConfirm.value = false
     // 清理登录状态并跳转首页
+    stopTokenRefreshTimer()
     authStore.clear()
+    clearTokens()
     router.push('/')
   } catch (error: unknown) {
     const err = error as { response?: { data?: { message?: string } }; message?: string }

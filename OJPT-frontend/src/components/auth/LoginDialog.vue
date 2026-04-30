@@ -35,7 +35,7 @@ const showResetDialog = ref(false)
 const resetAccount = ref('')
 const authMode = ref<AuthMode>('login')
 const activeTab = ref<LoginTab>('email')
-const autoLoggingIn = computed(() => auth.authInitializing && !auth.isAuthed)
+const autoLoggingIn = computed(() => auth.authInitializing.value && !auth.isAuthed.value)
 
 const passwordInputRef = ref<InstanceType<typeof import('element-plus').ElInput> | null>(null)
 
@@ -349,7 +349,7 @@ const close = () => {
 }
 
 watch(
-  () => auth.isAuthed,
+  () => auth.isAuthed.value,
   (val) => {
     if (val) {
       emit('update:modelValue', false)
