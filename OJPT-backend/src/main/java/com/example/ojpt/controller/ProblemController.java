@@ -114,11 +114,11 @@ public class ProblemController {
     }
 
     @GetMapping("/submissions/{submissionId}")
-    @Operation(summary = "鏌ヨ鎻愪氦缁撴灉", description = "鏍规嵁 submissionId 鏌ヨ褰撳墠鐢ㄦ埛鐨勬彁浜ょ姸鎬佷笌鍒ら缁撴灉")
+    @Operation(summary = "查询提交结果", description = "根据 submissionId 查询当前用户的提交状态与判题结果")
     public Result<SubmissionCreateResultVO> getSubmissionResult(@PathVariable("submissionId") Long submissionId) {
         Long userId = getCurrentUserId();
         if (userId == null) {
-            throw com.example.ojpt.exception.BusinessException.unauthorized("鏈櫥褰?");
+            throw com.example.ojpt.exception.BusinessException.unauthorized("未登录");
         }
         return Result.ok(submissionService.getSubmissionResult(userId, submissionId));
     }

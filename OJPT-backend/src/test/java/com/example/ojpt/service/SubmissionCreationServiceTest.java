@@ -82,10 +82,11 @@ class SubmissionCreationServiceTest {
                         .setProblemId(2100000000000000001L)
                         .setCaseType("HIDDEN")
                         .setSortOrder(2)
-                        .setInputText("4\n2 7 11 15\n9\n")
-                        .setExpectedOutput("0 1")
+                        .setInputText("6\n-10 -20 30 40 5 15\n20\n")
+                        .setExpectedOutput("4 5")
         ));
-        when(codeExecutionService.execute(any(), any(), any(), any(), any())).thenReturn(
+        when(codeExecutionService.execute(any(), any(), any(), any(), any()))
+                .thenReturn(
                 CodeExecutionResult.builder()
                         .compileSuccess(true)
                         .runtimeSuccess(true)
@@ -94,7 +95,17 @@ class SubmissionCreationServiceTest {
                         .stderr("")
                         .timeMs(12L)
                         .build()
-        );
+                )
+                .thenReturn(
+                        CodeExecutionResult.builder()
+                                .compileSuccess(true)
+                                .runtimeSuccess(true)
+                                .timedOut(false)
+                                .stdout("0 2")
+                                .stderr("")
+                                .timeMs(14L)
+                                .build()
+                );
         when(submissionMapper.selectList(any())).thenReturn(List.of(
                 new Submission().setProblemId(2100000000000000001L).setStatus("AC").setTimeMs(12),
                 new Submission().setProblemId(2100000000000000001L).setStatus("AC").setTimeMs(36),
@@ -118,7 +129,7 @@ class SubmissionCreationServiceTest {
         assertEquals(2300000000000000009L, result.getSubmissionId());
         assertEquals("AC", result.getStatus());
         assertEquals("判题通过", result.getMessage());
-        assertEquals(12, result.getTimeMs());
+        assertEquals(14, result.getTimeMs());
         assertEquals(1, result.getRank());
         assertEquals(2, result.getTotalCaseCount());
         assertEquals(3, result.getRankStats().getAcceptedCount());

@@ -235,7 +235,7 @@ public class SubmissionServiceImpl implements SubmissionService {
 
         if (asynchronousExecution) {
             dispatchAfterCommit(() -> processQueuedSubmission(submission.getId()));
-            return new SubmissionCreateResultVO(submission.getId(), STATUS_QUEUED, "宸茶繘鍏ュ垽棰樺队鍒?");
+            return new SubmissionCreateResultVO(submission.getId(), STATUS_QUEUED, "已进入判题队列");
         }
 
         List<ProblemTestCase> judgeCases = new java.util.ArrayList<>(problemTestCaseMapper.selectList(
@@ -309,7 +309,7 @@ public class SubmissionServiceImpl implements SubmissionService {
         Problem problem = problemMapper.selectById(submission.getProblemId());
         if (problem == null || !STATUS_PUBLISHED.equals(problem.getStatus())) {
             submission.setStatus(STATUS_SYSTEM_ERROR);
-            submission.setJudgeMessage("棰樼洰涓嶅瓨鍦ㄦ垨涓嶅彲鐢?");
+            submission.setJudgeMessage("题目不存在或不可用");
             submissionMapper.updateById(submission);
             return;
         }
@@ -328,14 +328,14 @@ public class SubmissionServiceImpl implements SubmissionService {
 
         if (judgeCases.isEmpty()) {
             submission.setStatus(STATUS_SYSTEM_ERROR);
-            submission.setJudgeMessage("褰撳墠棰樼洰灏氭湭閰嶇疆鍒ら鐢ㄤ緥");
+            submission.setJudgeMessage("当前题目尚未配置判题用例");
             submissionMapper.updateById(submission);
             return;
         }
 
         try {
             submission.setStatus(STATUS_RUNNING);
-            submission.setJudgeMessage("鍒ら涓?");
+            submission.setJudgeMessage("判题中");
             submissionMapper.updateById(submission);
 
             SubmissionCreateResultVO result = judgeSubmission(problem, submission, judgeCases);
@@ -346,7 +346,7 @@ public class SubmissionServiceImpl implements SubmissionService {
             }
         } catch (RuntimeException ex) {
             submission.setStatus(STATUS_SYSTEM_ERROR);
-            submission.setJudgeMessage(ex.getMessage() == null || ex.getMessage().isBlank() ? "鍒ら澶辫触" : ex.getMessage());
+            submission.setJudgeMessage(ex.getMessage() == null || ex.getMessage().isBlank() ? "判题失败" : ex.getMessage());
             submissionMapper.updateById(submission);
         }
     }
@@ -378,14 +378,14 @@ public class SubmissionServiceImpl implements SubmissionService {
 
     private String summarizeSubmissionMessage(Submission submission) {
         return switch (submission.getStatus()) {
-            case STATUS_AC -> "鍒ら閫氳繃";
-            case STATUS_WA -> "绛旀閿欒";
-            case STATUS_CE -> "缂栬瘧澶辫触";
-            case STATUS_RE -> "杩愯閿欒";
-            case STATUS_TLE -> "杩愯瓒呮椂";
-            case STATUS_RUNNING -> "鍒ら涓?";
-            case STATUS_QUEUED -> "鎺掗槦涓?";
-            case STATUS_SYSTEM_ERROR -> "绯荤粺閿欒";
+            case STATUS_AC -> "判题通过";
+            case STATUS_WA -> "答案错误";
+            case STATUS_CE -> "编译失败";
+            case STATUS_RE -> "运行错误";
+            case STATUS_TLE -> "运行超时";
+            case STATUS_RUNNING -> "判题中";
+            case STATUS_QUEUED -> "排队中";
+            case STATUS_SYSTEM_ERROR -> "系统错误";
             default -> submission.getJudgeMessage() == null ? submission.getStatus() : submission.getJudgeMessage();
         };
     }
@@ -549,7 +549,12 @@ public class SubmissionServiceImpl implements SubmissionService {
                     "运行错误"
             );
         }
-        boolean passed = matchesExpectedOutput(problem.getProblemNo(), judgeCase.getExpectedOutput(), executionResult.getStdout());
+        boolean passed = matchesExpectedOutput(
+                problem.getProblemNo(),
+                judgeCase.getInputText(),
+                judgeCase.getExpectedOutput(),
+                executionResult.getStdout()
+        );
         return new CodeRunCaseResultVO(
                 index,
                 judgeCase.getCaseType(),
@@ -660,21 +665,51 @@ public class SubmissionServiceImpl implements SubmissionService {
         }
     }
 
-    private boolean matchesExpectedOutput(Integer problemNo, String expectedOutput, String actualOutput) {
+    private boolean matchesExpectedOutput(Integer problemNo, String inputText, String expectedOutput, String actualOutput) {
         String expected = normalizeText(expectedOutput);
         String actual = normalizeText(actualOutput);
 
-        if (problemNo != null && problemNo == 1) {
-            String[] expectedParts = expected.split("\\s+");
-            String[] actualParts = actual.split("\\s+");
-            if (expectedParts.length != 2 || actualParts.length != 2) {
-                return false;
-            }
-            return (expectedParts[0].equals(actualParts[0]) && expectedParts[1].equals(actualParts[1]))
-                    || (expectedParts[0].equals(actualParts[1]) && expectedParts[1].equals(actualParts[0]));
+        if (problemNo != null && problemNo.intValue() == 1) {
+            return isValidTwoSumAnswer(inputText, actual) || isSameTwoNumberSet(expected, actual);
         }
 
         return expected.equals(actual);
+    }
+
+    private boolean isSameTwoNumberSet(String expected, String actual) {
+        String[] expectedParts = expected.split("\\s+");
+        String[] actualParts = actual.split("\\s+");
+        if (expectedParts.length != 2 || actualParts.length != 2) {
+            return false;
+        }
+        return (expectedParts[0].equals(actualParts[0]) && expectedParts[1].equals(actualParts[1]))
+                || (expectedParts[0].equals(actualParts[1]) && expectedParts[1].equals(actualParts[0]));
+    }
+
+    private boolean isValidTwoSumAnswer(String inputText, String actualOutput) {
+        String[] inputParts = normalizeText(inputText).split("\\s+");
+        String[] outputParts = normalizeText(actualOutput).split("\\s+");
+        if (inputParts.length < 3 || outputParts.length != 2) {
+            return false;
+        }
+        try {
+            int n = Integer.parseInt(inputParts[0]);
+            if (n < 2 || inputParts.length < n + 2) {
+                return false;
+            }
+            int firstIndex = Integer.parseInt(outputParts[0]);
+            int secondIndex = Integer.parseInt(outputParts[1]);
+            if (firstIndex == secondIndex || firstIndex < 0 || secondIndex < 0 || firstIndex >= n || secondIndex >= n) {
+                return false;
+            }
+
+            long firstValue = Long.parseLong(inputParts[firstIndex + 1]);
+            long secondValue = Long.parseLong(inputParts[secondIndex + 1]);
+            long target = Long.parseLong(inputParts[n + 1]);
+            return firstValue + secondValue == target;
+        } catch (NumberFormatException ex) {
+            return false;
+        }
     }
 
     private String normalizeText(String text) {

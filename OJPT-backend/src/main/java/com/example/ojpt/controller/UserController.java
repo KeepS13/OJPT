@@ -140,7 +140,7 @@ public class UserController {
     public Result<UserTrainingDashboardVO> getCurrentUserTrainingDashboard() {
         Long userId = getCurrentUserId();
         if (userId == null) {
-            throw BusinessException.unauthorized("鏈櫥褰曟垨鐧诲綍鐘舵€佸凡澶辨晥");
+            throw BusinessException.unauthorized("未登录或登录状态已失效");
         }
 
         return Result.ok(trainingDashboardService.getTrainingDashboard(userId));

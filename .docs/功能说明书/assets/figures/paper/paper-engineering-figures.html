@@ -1,0 +1,1669 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OJPT 论文软件工程图</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 24px;
+      background: #fff;
+      color: #111;
+      font-family: "SimSun", "宋体", "Times New Roman", serif;
+    }
+    main { width: max-content; }
+    section.diagram {
+      width: max-content;
+      margin: 0 0 24px;
+      padding: 10px;
+      background: #fff;
+    }
+    svg {
+      display: block;
+      overflow: visible;
+      background: #fff;
+    }
+    .box, .process, .store, .ellipse, .diamond {
+      fill: #fff;
+      stroke: #111;
+      stroke-width: 1.4;
+    }
+    .thin { stroke-width: 1.1; }
+    .line {
+      stroke: #111;
+      stroke-width: 1.25;
+      fill: none;
+    }
+    .txt {
+      fill: #111;
+      font-family: "SimSun", "宋体", "Times New Roman", serif;
+      font-size: 14px;
+      dominant-baseline: middle;
+      text-anchor: middle;
+    }
+    .small { font-size: 12px; }
+    .tiny { font-size: 11px; }
+    .bold { font-weight: 700; }
+  </style>
+</head>
+<body>
+<main id="app"></main>
+
+<script>
+const NS = "http://www.w3.org/2000/svg";
+
+function esc(value) {
+  return String(value).replace(/[&<>"']/g, (ch) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  }[ch]));
+}
+
+function tspans(text, x, y, lineHeight = 16, cls = "txt") {
+  const lines = String(text).split("\n");
+  const start = y - ((lines.length - 1) * lineHeight) / 2;
+  return `<text class="${cls}" x="${x}" y="${start}">${lines.map((line, i) =>
+    `<tspan x="${x}" dy="${i === 0 ? 0 : lineHeight}">${esc(line)}</tspan>`
+  ).join("")}</text>`;
+}
+
+function svg(w, h, inner) {
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="${NS}">
+    <defs>
+      <marker id="arrow" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="strokeWidth">
+        <path d="M0,0 L9,3.5 L0,7 Z" fill="#111"></path>
+      </marker>
+    </defs>
+    ${inner}
+  </svg>`;
+}
+
+function box(x, y, w, h, text, cls = "box", textCls = "txt") {
+  return `<rect class="${cls}" x="${x}" y="${y}" width="${w}" height="${h}"></rect>${tspans(text, x + w / 2, y + h / 2, 16, textCls)}`;
+}
+
+function roundBox(x, y, w, h, text, textCls = "txt") {
+  return `<rect class="box" x="${x}" y="${y}" width="${w}" height="${h}" rx="${Math.min(18, h / 2)}" ry="${Math.min(18, h / 2)}"></rect>${tspans(text, x + w / 2, y + h / 2, 16, textCls)}`;
+}
+
+function ellipse(x, y, w, h, text, textCls = "txt") {
+  return `<ellipse class="ellipse" cx="${x + w / 2}" cy="${y + h / 2}" rx="${w / 2}" ry="${h / 2}"></ellipse>${tspans(text, x + w / 2, y + h / 2, 16, textCls)}`;
+}
+
+function underlinedEllipse(x, y, w, h, text, textCls = "txt", underlineOffset = 9, textScale = 10.5, inset = 22) {
+  const cx = x + w / 2;
+  const cy = y + h / 2;
+  const textW = Math.min(w - inset, Math.max(28, String(text).length * textScale));
+  const underlineY = cy + underlineOffset;
+  return `${ellipse(x, y, w, h, text, textCls)}<line class="line thin" x1="${cx - textW / 2}" y1="${underlineY}" x2="${cx + textW / 2}" y2="${underlineY}"></line>`;
+}
+
+function circle(cx, cy, r, text, textCls = "txt") {
+  return `<circle class="process" cx="${cx}" cy="${cy}" r="${r}"></circle>${tspans(text, cx, cy, 15, textCls)}`;
+}
+
+function diamond(cx, cy, w, h, text, textCls = "txt") {
+  const pts = `${cx},${cy - h / 2} ${cx + w / 2},${cy} ${cx},${cy + h / 2} ${cx - w / 2},${cy}`;
+  return `<polygon class="diamond" points="${pts}"></polygon>${tspans(text, cx, cy, 15, textCls)}`;
+}
+
+function line(x1, y1, x2, y2, arrow = false) {
+  return `<line class="line" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" ${arrow ? 'marker-end="url(#arrow)"' : ""}></line>`;
+}
+
+function poly(points, arrow = true) {
+  return `<polyline class="line" points="${points.map((p) => p.join(",")).join(" ")}" ${arrow ? 'marker-end="url(#arrow)"' : ""}></polyline>`;
+}
+
+function label(x, y, text, cls = "txt small") {
+  return tspans(text, x, y, 14, cls);
+}
+
+function store(x, y, w, h, code, name) {
+  return `${line(x, y, x + w, y)}${line(x, y + h, x + w, y + h)}${tspans(`${code}\n${name}`, x + w / 2, y + h / 2, 15, "txt small")}`;
+}
+
+function functionModules() {
+  let s = "";
+  s += box(450, 20, 240, 44, "OJPT 在线编程训练平台", "box", "txt small bold");
+  s += box(240, 110, 110, 40, "管理端", "box", "txt");
+  s += box(790, 110, 110, 40, "用户端", "box", "txt");
+  s += poly([[570,64],[570,84],[295,84],[295,110]], true);
+  s += poly([[570,64],[570,84],[845,84],[845,110]], true);
+  const admin = [
+    ["用户\n管理", "状态编辑\n重置审批"],
+    ["题库\n管理", "草稿发布\n归档维护"],
+    ["题目\n编辑", "题面标签\n测试用例"],
+    ["标签\n管理", "新增编辑\n删除标签"],
+    ["判题\n健康", "Docker\n镜像检查"],
+    ["数据\n概览", "统计卡片\n提交分布"],
+  ];
+  const user = [
+    ["账号\n认证", "登录注册\n账号安全"],
+    ["题库\n浏览", "筛选搜索\n分页查看"],
+    ["题目\n作答", "题面阅读\n代码编辑"],
+    ["代码\n运行", "自定义\n测试用例"],
+    ["正式\n提交", "异步判题\n结果轮询"],
+    ["训练\n数据", "看板记录\n进度状态"],
+  ];
+  function branch(items, startX, rootX) {
+    const y1 = 205, y2 = 340, gap = 90;
+    s += line(rootX, 150, rootX, 178);
+    s += line(startX, 178, startX + (items.length - 1) * gap, 178);
+    items.forEach((item, i) => {
+      const x = startX + i * gap;
+      s += line(x, 178, x, y1);
+      s += box(x - 24, y1, 48, 82, item[0], "box", "txt small");
+      s += line(x, y1 + 82, x, y2);
+      s += box(x - 41, y2, 82, 52, item[1], "box", "txt tiny");
+    });
+  }
+  branch(admin, 70, 295);
+  branch(user, 620, 845);
+  return svg(1140, 430, s);
+}
+
+function topDfd() {
+  let s = "";
+  const process = { cx: 375, cy: 119, rx: 75, ry: 75 };
+
+  function bottomPortY(x) {
+    const dx = x - process.cx;
+    return process.cy + process.ry * Math.sqrt(1 - (dx * dx) / (process.rx * process.rx));
+  }
+
+  s += box(35, 90, 70, 48, "用户");
+  s += box(665, 90, 88, 48, "管理员");
+  s += ellipse(300, 44, 150, 150, "OJPT 在线\n编程训练平台");
+  s += line(105, 106, 300, 106, true);
+  s += label(185, 82, "登录信息  题库查询  代码提交");
+  s += line(300, 130, 105, 130, true);
+  s += label(190, 148, "题目数据  判题结果  训练数据");
+  s += line(450, 106, 665, 106, true);
+  s += label(555, 82, "管理请求  题目维护");
+  s += line(665, 130, 450, 130, true);
+  s += label(555, 148, "配置结果  统计日志");
+  s += box(235, 255, 115, 44, "MySQL\nRedis", "box", "txt small");
+  s += line(320, bottomPortY(320), 320, 255, true);
+  s += line(345, 255, 345, bottomPortY(345), true);
+  s += label(220, 225, "持久化数据");
+  s += label(220, 245, "令牌状态");
+  s += box(405, 255, 120, 44, "Docker\n判题环境", "box", "txt small");
+  s += line(410, bottomPortY(410), 410, 255, true);
+  s += line(435, 255, 435, bottomPortY(435), true);
+  s += label(590, 225, "源码/输入");
+  s += label(590, 245, "执行结果");
+  return svg(790, 330, s);
+}
+
+function zeroDfd() {
+  let s = "";
+  s += box(30, 55, 90, 42, "管理员", "box", "txt small");
+  s += box(810, 235, 90, 70, "普通用户", "box", "txt small");
+  s += box(790, 395, 120, 44, "Docker\n判题环境", "box", "txt small");
+
+  s += circle(245, 78, 45, "P1\n用户认证");
+  s += circle(450, 150, 45, "P2\n题库浏览");
+  s += circle(300, 285, 45, "P3\n作答草稿");
+  s += circle(570, 285, 45, "P4\n运行判题");
+  s += circle(570, 455, 45, "P5\n训练数据");
+  s += circle(245, 455, 45, "P6\n管理维护");
+
+  s += store(190, 148, 110, 36, "D1", "用户认证库");
+  s += store(395, 225, 115, 36, "D2", "题库数据");
+  s += store(245, 358, 110, 36, "D3", "作答数据");
+  s += store(515, 358, 115, 36, "D4", "判题数据");
+  s += store(515, 518, 115, 36, "D5", "训练进度");
+  s += store(190, 518, 110, 36, "D6", "管理数据");
+
+  s += line(120, 66, 200, 66, true);
+  s += label(160, 48, "账号登录信息", "txt tiny");
+  s += line(200, 90, 120, 90, true);
+  s += label(160, 108, "权限菜单", "txt tiny");
+  s += line(245, 123, 245, 148, true);
+
+  s += poly([[75,97],[75,455],[200,455]], true);
+  s += label(58, 270, "管理操作", "txt tiny");
+  s += poly([[200,470],[95,470],[95,97]], true);
+  s += label(145, 502, "维护结果", "txt tiny");
+  s += line(245, 500, 245, 518, true);
+  s += poly([[290,455],[370,455],[370,243],[395,243]], true);
+  s += label(350, 342, "题目/标签维护", "txt tiny");
+
+  s += poly([[810,252],[745,252],[745,150],[495,150]], true);
+  s += label(680, 132, "查询条件", "txt tiny");
+  s += poly([[495,166],[760,166],[760,264],[810,264]], true);
+  s += label(675, 184, "题目列表", "txt tiny");
+  s += line(450, 195, 450, 225, true);
+  s += poly([[450,195],[450,210],[300,210],[300,240]], true);
+  s += label(375, 200, "题目详情", "txt tiny");
+
+  s += line(300, 330, 300, 358, true);
+  s += line(345, 285, 525, 285, true);
+  s += label(435, 280, "源码/语言/输入", "txt tiny");
+  s += line(810, 278, 615, 278, true);
+  s += label(712, 258, "运行/提交请求", "txt tiny");
+  s += line(615, 294, 810, 294, true);
+  s += label(710, 310, "判题结果", "txt tiny");
+
+  s += poly([[604,320],[758,320],[758,417],[790,417]], true);
+  s += label(704, 336, "源码/输入", "txt tiny");
+  s += poly([[790,430],[742,430],[742,338],[604,338]], true);
+  s += label(700, 448, "执行结果", "txt tiny");
+  s += line(552, 330, 552, 358, true);
+  s += line(590, 394, 590, 410, true);
+  s += label(648, 372, "提交结果", "txt tiny");
+  s += line(570, 500, 570, 518, true);
+  s += poly([[615,455],[770,455],[770,305],[810,305]], true);
+  s += label(700, 472, "训练看板", "txt tiny");
+
+  return svg(930, 575, s);
+}
+
+function level1Dfd() {
+  let s = "";
+  s += box(28, 251, 80, 38, "用户", "box", "txt small");
+  s += box(28, 45, 90, 40, "管理员", "box", "txt small");
+  s += box(690, 105, 115, 44, "Docker\n判题环境", "box", "txt tiny");
+
+  s += store(335, 165, 110, 36, "D3-1", "代码草稿表");
+  s += store(495, 165, 110, 36, "D2", "测试用例表");
+  s += store(680, 248, 115, 36, "D3-2", "提交记录表");
+  s += store(680, 368, 115, 36, "D3-3", "用例结果表");
+  s += store(390, 440, 110, 36, "D3-4", "进度表");
+
+  s += circle(230, 270, 43, "P3.1\n读取题目");
+  s += circle(390, 270, 43, "P3.2\n编辑草稿");
+  s += circle(550, 270, 43, "P3.3\n提交判题");
+  s += circle(550, 390, 43, "P3.4\n保存结果");
+  s += circle(310, 390, 43, "P3.5\n展示结果");
+
+  s += line(108, 270, 187, 270, true);
+  s += label(147, 250, "题号/筛选条件", "txt tiny");
+  s += line(273, 270, 347, 270, true);
+  s += line(433, 270, 507, 270, true);
+  s += label(470, 262, "源码/语言", "txt tiny");
+
+  s += line(390, 227, 390, 201, true);
+  s += line(550, 201, 550, 227, true);
+  s += line(593, 270, 680, 270, true);
+  s += line(593, 390, 680, 390, true);
+  s += poly([[550,433],[550,458],[500,458]], true);
+
+  s += poly([[582,240],[635,240],[635,127],[690,127]], true);
+  s += label(660, 108, "源码/输入", "txt tiny");
+  s += poly([[748,149],[815,149],[815,420],[584,420]], true);
+  s += label(842, 260, "执行结果", "txt tiny");
+
+  s += line(507, 390, 353, 390, true);
+  s += label(430, 372, "结果汇总", "txt tiny");
+  s += poly([[267,390],[68,390],[68,289]], true);
+  s += label(205, 410, "结果展示", "txt tiny");
+
+  s += poly([[118,65],[550,65],[550,165]], true);
+  s += label(330, 47, "题面/测试用例维护", "txt tiny");
+  return svg(875, 500, s);
+}
+
+function architecture() {
+  let s = "";
+  s += box(285, 20, 210, 42, "OJPT 在线编程训练平台", "box", "txt small");
+  const layers = [
+    [45, 130, "表现层"], [245, 130, "控制层"], [445, 130, "业务逻辑层"], [645, 130, "数据访问层"],
+  ];
+  layers.forEach(([x,y,t]) => {
+    s += line(390,62,x+50,130,true);
+    s += box(x,y,100,38,t,"box","txt small");
+  });
+  const subs = [
+    [0,"Vue 页面"],[0,"Element Plus"],[1,"Controller"],[1,"JWT Filter"],[2,"Service"],[2,"Judge Service"],[3,"Mapper"],[3,"MySQL/Redis"]
+  ];
+  subs.forEach(([idx,t], i) => {
+    const x = layers[idx][0] - 30 + (i % 2) * 90;
+    const y = 230;
+    s += line(layers[idx][0]+50,168,x+42,y,true);
+    s += box(x,y,84,40,t,"box","txt tiny");
+  });
+  return svg(830, 300, s);
+}
+
+function deployment() {
+  let s = "";
+  s += box(20, 120, 98, 44, "浏览器\n客户端", "box", "txt small");
+  s += box(170, 120, 110, 44, "前端服务\nVue/Vite", "box", "txt small");
+  s += box(330, 120, 120, 44, "后端服务\nSpring Boot", "box", "txt small");
+  s += box(510, 70, 110, 44, "MySQL\n数据库", "box", "txt small");
+  s += box(510, 205, 110, 44, "Redis\n缓存", "box", "txt small");
+  s += box(700, 120, 120, 44, "Docker\n判题环境", "box", "txt small");
+  s += line(118,142,170,142,true); s += label(144,126,"HTTP", "txt tiny");
+  s += line(280,142,330,142,true); s += label(305,126,"API", "txt tiny");
+  s += line(450,130,510,92,true); s += label(484,92,"JDBC", "txt tiny");
+  s += poly([[430,164],[430,227],[510,227]], true); s += label(468,214,"令牌状态", "txt tiny");
+  s += line(450,136,700,136,true); s += label(575,120,"源码/输入", "txt tiny");
+  s += line(700,158,450,158,true); s += label(575,178,"执行结果", "txt tiny");
+  s += box(330, 260, 120, 38, "上传目录/日志", "box", "txt small");
+  s += line(370,164,370,260,true);
+  return svg(850, 330, s);
+}
+
+const entityData = {
+  "fig-4-3-user-entity": ["用户", ["用户ID","用户名","密码","邮箱","手机号","头像","状态","角色类型","用户资料","密码重置申请"]],
+  "fig-4-4-problem-entity": ["题目", ["题目ID","题号","标题","难度","题面Markdown","时间限制","内存限制","题目状态","提交次数","通过次数"]],
+  "fig-4-5-tag-entity": ["标签", ["标签ID","标签名称","标签类型","题目ID","绑定时间"]],
+  "fig-4-6-testcase-entity": ["测试用例", ["用例ID","题目ID","用例类型","输入数据","期望输出","样例说明","排序号"]],
+  "fig-4-7-code-draft-entity": ["代码草稿", ["草稿ID","用户ID","题目ID","语言","源代码","创建时间","更新时间"]],
+  "fig-4-8-submission-entity": ["提交记录", ["提交ID","用户ID","题目ID","语言","源代码","判题状态","耗时","内存","编译信息","判题信息"]],
+  "fig-4-9-submission-case-result-entity": ["提交用例结果", ["结果ID","提交ID","用例类型","用例序号","状态","输入","期望输出","实际输出","错误输出","耗时"]],
+  "fig-4-10-user-problem-progress-entity": ["用户题目进度", ["进度ID","用户ID","题目ID","进度状态","最近提交ID","更新时间"]]
+};
+
+const primaryKeyData = {
+  "fig-4-3-user-entity": "用户ID",
+  "fig-4-4-problem-entity": "题目ID",
+  "fig-4-5-tag-entity": "标签ID",
+  "fig-4-6-testcase-entity": "用例ID",
+  "fig-4-7-code-draft-entity": "草稿ID",
+  "fig-4-8-submission-entity": "提交ID",
+  "fig-4-9-submission-case-result-entity": "结果ID",
+  "fig-4-10-user-problem-progress-entity": "进度ID"
+};
+
+function entityFigure(id) {
+  const [name, attrs] = entityData[id];
+  const primaryKey = primaryKeyData[id];
+  const dense = attrs.length > 8;
+  const w = dense ? 720 : 620;
+  const h = dense ? 470 : 360;
+  const cx = w / 2, cy = h / 2;
+  const rx = dense ? 285 : 235;
+  const ry = dense ? 185 : 145;
+  const centerW = Math.max(130, name.length * 18 + 42);
+  let connectors = "";
+  let ovals = "";
+  attrs.forEach((attr, i) => {
+    const angle = -Math.PI / 2 + (i * Math.PI * 2) / attrs.length;
+    const x = cx + Math.cos(angle) * rx;
+    const y = cy + Math.sin(angle) * ry;
+    const ew = Math.max(82, attr.length * 15 + 24);
+    const eh = 42;
+    connectors += line(cx, cy, x, y);
+    ovals += attr === primaryKey
+      ? underlinedEllipse(x - ew / 2, y - eh / 2, ew, eh, attr, "txt small")
+      : ellipse(x - ew / 2, y - eh / 2, ew, eh, attr, "txt small");
+  });
+  return svg(w, h, connectors + ovals + box(cx - centerW / 2, cy - 26, centerW, 52, name, "box", "txt bold"));
+}
+
+function erOverview() {
+  let links = "";
+  let nodes = "";
+  const graph = {};
+  const erPrimaryKeys = {
+    draft: "草稿ID",
+    problem: "题目ID",
+    case: "用例ID",
+    profile: "资料ID",
+    user: "用户ID",
+    submission: "提交ID",
+    tag: "标签ID",
+    reset: "申请ID",
+    progress: "进度ID",
+    caseResult: "结果ID"
+  };
+
+  function rectPort(cx, cy, w, h, tx, ty) {
+    const dx = tx - cx;
+    const dy = ty - cy;
+    const scale = Math.max(Math.abs(dx) / (w / 2), Math.abs(dy) / (h / 2), 1);
+    return [cx + dx / scale, cy + dy / scale];
+  }
+
+  function diamondPort(cx, cy, w, h, tx, ty) {
+    const dx = tx - cx;
+    const dy = ty - cy;
+    const scale = Math.abs(dx) / (w / 2) + Math.abs(dy) / (h / 2);
+    return scale ? [cx + dx / scale, cy + dy / scale] : [cx, cy];
+  }
+
+  function nodePort(node, target) {
+    if (node.kind === "rel") return diamondPort(node.cx, node.cy, node.w, node.h, target.cx, target.cy);
+    return rectPort(node.cx, node.cy, node.w, node.h, target.cx, target.cy);
+  }
+
+  function attrEntity(key, cx, cy, w, h, name, attrs) {
+    graph[key] = { kind: "entity", cx, cy, w, h };
+    const primaryKey = erPrimaryKeys[key];
+    attrs.forEach(([ax, ay, text]) => {
+      const ew = Math.max(44, text.length * 10 + 16);
+      const [sx, sy] = rectPort(cx, cy, w, h, ax, ay);
+      links += line(sx, sy, ax, ay);
+      nodes += text === primaryKey
+        ? underlinedEllipse(ax - ew / 2, ay - 12, ew, 24, text, "txt tiny", 6.2, 9.2, 18)
+        : ellipse(ax - ew / 2, ay - 12, ew, 24, text, "txt tiny");
+    });
+    nodes += box(cx - w / 2, cy - h / 2, w, h, name, "box", "txt small bold");
+  }
+
+  function rel(key, cx, cy, text, w = 60, h = 36) {
+    graph[key] = { kind: "rel", cx, cy, w, h };
+    nodes += diamond(cx, cy, w, h, text, "txt tiny");
+  }
+
+  function connect(aKey, bKey, card, t = 0.28, dx = 0, dy = 0) {
+    const a = graph[aKey];
+    const b = graph[bKey];
+    const [x1, y1] = nodePort(a, b);
+    const [x2, y2] = nodePort(b, a);
+    links += line(x1, y1, x2, y2);
+    if (card) links += label(x1 + (x2 - x1) * t + dx, y1 + (y2 - y1) * t + dy, card, "txt tiny");
+  }
+
+  attrEntity("draft", 300, 145, 96, 34, "代码草稿", [
+    [215, 72, "草稿ID"], [330, 62, "创建时间"], [205, 145, "语言"], [230, 230, "源代码"], [385, 225, "题目ID"]
+  ]);
+  attrEntity("problem", 610, 145, 82, 34, "题目", [
+    [520, 72, "题目ID"], [585, 52, "题号"], [650, 52, "标题"], [720, 78, "难度"], [545, 235, "题目状态"]
+  ]);
+  attrEntity("case", 880, 145, 102, 34, "测试用例", [
+    [790, 72, "用例ID"], [940, 72, "排序号"], [995, 145, "输入"], [945, 230, "期望输出"]
+  ]);
+  attrEntity("profile", 155, 365, 96, 34, "用户资料", [
+    [90, 290, "资料ID"], [48, 365, "昵称"], [96, 445, "简介"], [200, 292, "头像"]
+  ]);
+  attrEntity("user", 390, 385, 82, 34, "用户", [
+    [390, 295, "用户ID"], [300, 330, "用户名"], [385, 475, "角色"], [470, 320, "邮箱"], [470, 450, "状态"]
+  ]);
+  attrEntity("submission", 690, 385, 108, 34, "提交记录", [
+    [760, 300, "提交ID"], [610, 465, "状态"], [690, 505, "耗时"], [805, 335, "源代码"]
+  ]);
+  attrEntity("tag", 1040, 345, 76, 34, "标签", [
+    [980, 270, "标签ID"], [1122, 310, "题目ID"], [1122, 380, "名称"], [1035, 440, "类型"]
+  ]);
+  attrEntity("reset", 165, 625, 122, 34, "密码重置申请", [
+    [80, 545, "申请ID"], [55, 625, "邮箱"], [116, 710, "状态"], [235, 710, "申请时间"]
+  ]);
+  attrEntity("progress", 470, 630, 132, 34, "用户题目进度", [
+    [365, 545, "进度ID"], [335, 630, "进度状态"], [440, 725, "最近提交"], [565, 705, "更新时间"], [580, 565, "题目ID"]
+  ]);
+  attrEntity("caseResult", 945, 610, 126, 34, "提交用例结果", [
+    [1045, 570, "结果ID"], [810, 610, "用例序号"], [900, 705, "状态"], [1065, 525, "耗时"], [1070, 670, "错误输出"]
+  ]);
+
+  rel("extend", 275, 365, "扩展");
+  rel("apply", 255, 505, "申请");
+  rel("save", 330, 255, "保存");
+  rel("relDraftProblem", 455, 145, "关联");
+  rel("submit", 540, 385, "提交");
+  rel("relProblemSubmission", 645, 255, "对应");
+  rel("own", 745, 145, "拥有");
+  rel("bind", 835, 285, "绑定");
+  rel("contain", 820, 500, "包含");
+  rel("train", 440, 505, "训练");
+
+  connect("profile", "extend", "1", 0.38, 0, -10);
+  connect("extend", "user", "1", 0.58, 0, -10);
+  connect("user", "apply", "1", 0.28, -8, 4);
+  connect("apply", "reset", "N", 0.55, -6, 8);
+  connect("draft", "save", "N", 0.28, 8, 0);
+  connect("save", "user", "1", 0.58, 8, 0);
+  connect("draft", "relDraftProblem", "N", 0.28, 0, -10);
+  connect("relDraftProblem", "problem", "1", 0.58, 0, -10);
+  connect("user", "submit", "1", 0.28, 0, -10);
+  connect("submit", "submission", "N", 0.58, 0, -10);
+  connect("problem", "relProblemSubmission", "1", 0.28, 8, -2);
+  connect("relProblemSubmission", "submission", "N", 0.58, 8, 0);
+  connect("problem", "own", "1", 0.28, 0, -10);
+  connect("own", "case", "N", 0.58, 0, -10);
+  connect("problem", "bind", "M", 0.25, 8, 2);
+  connect("bind", "tag", "N", 0.58, 0, -10);
+  connect("submission", "contain", "1", 0.28, 8, 0);
+  connect("contain", "caseResult", "N", 0.58, 8, 0);
+  connect("user", "train", "1", 0.3, -8, 0);
+  connect("train", "progress", "N", 0.55, 8, 0);
+
+  return svg(1160, 750, links + nodes);
+}
+
+function legacyFlowFigure(kind) {
+  const flows = {
+    "fig-4-12-jwt-auth-flow": {
+      nodes: [
+        { text: "开始", type: "terminal" },
+        { text: "用户提交\n账号密码" },
+        { text: "校验账号\n状态", type: "decision", nextLabel: "正常", fail: "认证失败\n返回提示" },
+        { text: "BCrypt\n校验密码", type: "decision", nextLabel: "匹配", fail: "密码错误\n返回提示" },
+        { text: "生成JWT\n设置过期时间" },
+        { text: "返回Token\n和用户信息" },
+        { text: "前端保存\n登录态" },
+        { text: "请求拦截器\n携带Token" },
+        { text: "JWT过滤器\n解析签名", type: "decision", nextLabel: "有效", fail: "Token无效\n返回401" },
+        { text: "装载用户\n权限上下文" },
+        { text: "接口权限\n判断", type: "decision", nextLabel: "有权", fail: "无权限\n返回403" },
+        { text: "执行业务接口" },
+        { text: "返回接口结果" },
+        { text: "结束", type: "terminal" },
+      ]
+    },
+    "fig-5-1-login-flow": {
+      nodes: [
+        { text: "开始", type: "terminal" },
+        { text: "打开登录框" },
+        { text: "填写账号\n密码" },
+        { text: "前端表单\n校验", type: "decision", nextLabel: "通过", fail: "提示重填" },
+        { text: "调用\n/auth/login" },
+        { text: "查询用户\n基础信息" },
+        { text: "账号状态\n校验", type: "decision", nextLabel: "正常", fail: "账号禁用\n返回失败" },
+        { text: "密码哈希\n匹配", type: "decision", nextLabel: "匹配", fail: "密码错误\n返回失败" },
+        { text: "生成Token\n组装用户信息" },
+        { text: "useAuth保存\nToken和用户" },
+        { text: "加载头像\n刷新导航" },
+        { text: "跳转来源页\n或首页" },
+        { text: "结束", type: "terminal" },
+      ]
+    },
+    "fig-5-2-problem-filter-flow": {
+      nodes: [
+        { text: "开始", type: "terminal" },
+        { text: "进入题库页" },
+        { text: "初始化分页\n排序参数" },
+        { text: "读取搜索词\n难度/标签/状态" },
+        { text: "组合查询参数" },
+        { text: "请求\n/problems列表" },
+        { text: "后端筛选\n已发布题目" },
+        { text: "叠加关键词\n难度和标签" },
+        { text: "关联用户\n做题进度" },
+        { text: "组装标签\n通过率和分页" },
+        { text: "是否存在\n记录", type: "decision", nextLabel: "有", fail: "显示空状态\n保留筛选条件" },
+        { text: "渲染题目表格" },
+        { text: "更新分页\n统计卡片" },
+        { text: "结束", type: "terminal" },
+      ]
+    },
+    "fig-5-3-code-draft-flow": {
+      nodes: [
+        { text: "开始", type: "terminal" },
+        { text: "打开做题页" },
+        { text: "加载题目详情\n和样例用例" },
+        { text: "选择语言\n生成模板" },
+        { text: "用户已登录", type: "decision", nextLabel: "是", fail: "仅本地编辑\n提示登录保存" },
+        { text: "查询当前语言\n代码草稿" },
+        { text: "存在则加载草稿\n否则使用模板" },
+        { text: "填充编辑器\n初始化历史" },
+        { text: "监听代码输入" },
+        { text: "800ms防抖\n触发保存" },
+        { text: "内容满足\n保存条件", type: "decision", nextLabel: "满足", fail: "跳过保存\n保持当前状态" },
+        { text: "PUT保存草稿" },
+        { text: "后端按用户\n题目和语言Upsert" },
+        { text: "返回保存状态" },
+        { text: "结束", type: "terminal" },
+      ]
+    },
+    "fig-5-4-code-run-flow": {
+      nodes: [
+        { text: "开始", type: "terminal" },
+        { text: "编辑源码\n和输入用例" },
+        { text: "点击运行" },
+        { text: "校验语言\n源码和输入", type: "decision", nextLabel: "通过", fail: "提示补全\n运行参数" },
+        { text: "调用\n/problems/run" },
+        { text: "创建临时\n工作目录" },
+        { text: "按语言写入\n源码文件" },
+        { text: "编译阶段\n成功", type: "decision", nextLabel: "成功", fail: "返回编译失败\n错误信息" },
+        { text: "启动Docker\n隔离执行" },
+        { text: "运行超时\n或异常", type: "decision", nextLabel: "否", failLabel: "是", fail: "返回TLE/RE\n运行信息" },
+        { text: "收集输出\n耗时和错误流" },
+        { text: "比对期望\n输出", type: "decision", nextLabel: "一致", fail: "返回答案错误" },
+        { text: "清理容器\n和临时目录" },
+        { text: "展示运行结果\n和用例明细" },
+        { text: "结束", type: "terminal" },
+      ]
+    },
+    "fig-5-5-submit-async-judge-flow": {
+      nodes: [
+        { text: "开始", type: "terminal" },
+        { text: "点击正式提交" },
+        { text: "用户已登录", type: "decision", nextLabel: "是", fail: "弹出登录框" },
+        { text: "校验题目\n语言和源码", type: "decision", nextLabel: "通过", fail: "返回提交失败" },
+        { text: "创建提交记录\n状态QUEUED" },
+        { text: "事务提交后\n派发判题线程" },
+        { text: "前端保存ID\n开始轮询" },
+        { text: "加载题目\n和判题用例" },
+        { text: "题目可用\n且有用例", type: "decision", nextLabel: "是", fail: "写入系统错误" },
+        { text: "更新状态\nRUNNING" },
+        { text: "逐个执行\n样例/隐藏用例" },
+        { text: "单用例通过", type: "decision", nextLabel: "通过", fail: "保存失败用例\n停止后续执行" },
+        { text: "保存用例结果\n汇总最大耗时" },
+        { text: "更新提交\n最终状态" },
+        { text: "AC则更新\n通过次数和进度" },
+        { text: "轮询取得\n最终结果" },
+        { text: "展示排行\n和用例明细" },
+        { text: "结束", type: "terminal" },
+      ],
+      rowGap: 78
+    },
+    "fig-5-6-admin-problem-flow": {
+      nodes: [
+        { text: "开始", type: "terminal" },
+        { text: "进入题库\n管理页" },
+        { text: "管理员权限\n校验", type: "decision", nextLabel: "通过", fail: "返回403\n禁止访问" },
+        { text: "新建题目\n或打开草稿" },
+        { text: "编辑题号\n标题难度限制" },
+        { text: "编辑题面\nMarkdown" },
+        { text: "维护样例\n和隐藏用例" },
+        { text: "用例配置\n完整", type: "decision", nextLabel: "完整", fail: "提示补全\n测试用例" },
+        { text: "绑定或移除\n题目标签" },
+        { text: "检查Docker\n判题环境", type: "decision", nextLabel: "正常", fail: "提示环境异常\n暂缓发布" },
+        { text: "保存题目\n基础信息" },
+        { text: "批量替换\n测试用例" },
+        { text: "发布或归档\n题目状态" },
+        { text: "刷新管理列表" },
+        { text: "结束", type: "terminal" },
+      ]
+    }
+  };
+  const config = flows[kind];
+  const nodes = config.nodes;
+  const rowGap = config.rowGap || 82;
+  const top = 34;
+  const h = top * 2 + (nodes.length - 1) * rowGap + 48;
+  const cx = 250;
+  const branchX = 430;
+  const branchW = 150;
+  const branchEndX = branchX + branchW + 18;
+  const branchEndW = 76;
+  const w = branchEndX + branchEndW + 28;
+  let connectors = "";
+  let shapes = "";
+
+  function nodeInfo(node, i) {
+    const text = node.text;
+    const cy = top + i * rowGap;
+    const isTerminal = node.type === "terminal";
+    const isDecision = node.type === "decision";
+    const processW = node.w || 170;
+    const processH = node.h || 44;
+    const bounds = isTerminal
+      ? { left: cx - 45, right: cx + 45, top: cy - 17, bottom: cy + 17, cx, cy, w: 90, h: 34 }
+      : isDecision
+        ? { left: cx - 68, right: cx + 68, top: cy - 31, bottom: cy + 31, cx, cy, w: 136, h: 62 }
+        : { left: cx - processW / 2, right: cx + processW / 2, top: cy - processH / 2, bottom: cy + processH / 2, cx, cy, w: processW, h: processH };
+    return { ...node, isTerminal, isDecision, ...bounds };
+  }
+
+  const layout = nodes.map((node, i) => nodeInfo(node, i));
+  layout.forEach((node) => {
+    if (node.isTerminal) shapes += roundBox(node.left, node.top, 90, 34, node.text, "txt small");
+    else if (node.isDecision) shapes += diamond(node.cx, node.cy, 120, 62, node.text, "txt tiny");
+    else shapes += box(node.left, node.top, node.w, node.h, node.text, "box", "txt small");
+  });
+
+  for (let i = 0; i < layout.length - 1; i++) {
+    const cur = layout[i];
+    const next = layout[i + 1];
+    connectors += line(cur.cx, cur.bottom, next.cx, next.top, true);
+    if (cur.nextLabel) connectors += label(cur.cx + 32, (cur.bottom + next.top) / 2, cur.nextLabel, "txt tiny");
+  }
+
+  const failNodes = layout.filter((node) => node.fail);
+  failNodes.forEach((node) => {
+    const branchY = node.cy;
+    connectors += line(node.right, branchY, branchX, branchY, true);
+    connectors += label((node.right + branchX) / 2, branchY - 16, node.failLabel || "否", "txt tiny");
+    shapes += box(branchX, branchY - 22, branchW, 44, node.fail, "box", "txt small");
+    connectors += line(branchX + branchW, branchY, branchEndX, branchY, true);
+    shapes += roundBox(branchEndX, branchY - 17, branchEndW, 34, "结束", "txt small");
+  });
+
+  return svg(w, h, shapes + connectors);
+}
+
+const flowDefinitions = {
+  "fig-4-12-jwt-auth-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "读取本地\nToken" },
+      { text: "携带\nAccessToken" },
+      { text: "JWT过滤器\n解析签名", type: "decision", nextLabel: "有效", failLabel: "无效", fail: "返回401\n清空登录态" },
+      { text: "判断Token\n是否黑名单", type: "decision", nextLabel: "否", failLabel: "是", fail: "拒绝请求\n返回401" },
+      { text: "装载用户\n和角色" },
+      { text: "接口权限\n校验", type: "decision", nextLabel: "通过", failLabel: "拒绝", fail: "返回403\n权限不足" },
+      { text: "执行业务\n接口" },
+      { text: "AccessToken\n将过期", type: "decision", nextLabel: "是", failLabel: "否", fail: "继续使用\n当前会话" },
+      { text: "提交\nRefreshToken" },
+      { text: "刷新令牌\n校验轮换", type: "decision", nextLabel: "通过", failLabel: "失败", fail: "刷新失败\n重新登录" },
+      { text: "签发新\n双Token" },
+      { text: "更新前端\n登录态" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-1-login-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "打开登录\n弹窗" },
+      { text: "选择邮箱\n或手机号" },
+      { text: "输入账号\n和密码" },
+      { text: "前端表单\n校验", type: "decision", nextLabel: "通过", failLabel: "失败", fail: "提示用户\n重新填写" },
+      { text: "提交\n登录请求" },
+      { text: "后端解析\n账号类型" },
+      { text: "查询用户\n基础信息", type: "decision", nextLabel: "存在", failLabel: "不存在", fail: "账号不存在\n返回失败" },
+      { text: "校验密码\n哈希", type: "decision", nextLabel: "匹配", failLabel: "错误", fail: "密码错误\n返回失败" },
+      { text: "校验账号\n状态", type: "decision", nextLabel: "正常", failLabel: "异常", fail: "待审核或\n账号封禁" },
+      { text: "生成双Token\n保存刷新令牌" },
+      { text: "返回用户\n登录信息" },
+      { text: "前端保存\n登录态" },
+      { text: "关闭弹窗\n刷新导航" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-2-problem-filter-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "进入题库\n列表页" },
+      { text: "读取路由\n关键词" },
+      { text: "选择难度\n标签状态" },
+      { text: "组装分页\n筛选条件" },
+      { text: "请求题库\n列表接口" },
+      { text: "校验分页\n参数", type: "decision", nextLabel: "合法", failLabel: "非法", fail: "返回参数\n错误提示" },
+      { text: "查询已发布\n题目" },
+      { text: "按条件\n过滤题目" },
+      { text: "加载用户\n做题状态" },
+      { text: "加载标签\n计算通过率" },
+      { text: "存在结果", type: "decision", nextLabel: "是", failLabel: "否", fail: "显示空页\n保留条件" },
+      { text: "渲染题目\n表格" },
+      { text: "更新分页\n统计卡片" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-3-code-draft-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "用户编辑\n源码" },
+      { text: "监听代码\n变化" },
+      { text: "启动防抖\n计时器" },
+      { text: "满足保存\n条件", type: "decision", nextLabel: "满足", failLabel: "否", fail: "跳过保存\n保持本地" },
+      { text: "用户已登录", type: "decision", nextLabel: "是", failLabel: "否", fail: "提示登录后\n同步草稿" },
+      { text: "提交草稿\n保存请求" },
+      { text: "后端查询\n题目信息", type: "decision", nextLabel: "存在", failLabel: "无", fail: "保存失败\n题目无效" },
+      { text: "查询已有\n草稿" },
+      { text: "已有草稿", type: "decision", nextLabel: "是", failLabel: "否", fail: "新增草稿\n记录" },
+      { text: "更新草稿\n内容语言" },
+      { text: "返回草稿\n同步时间" },
+      { text: "保存序号\n最新", type: "decision", nextLabel: "是", failLabel: "否", fail: "忽略旧结果\n等待新保存" },
+      { text: "显示已\n同步" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-4-code-run-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "点击运行\n按钮" },
+      { text: "用户已登录", type: "decision", nextLabel: "是", failLabel: "否", fail: "打开登录框\n结束" },
+      { text: "校验源码\n非空", type: "decision", nextLabel: "通过", failLabel: "失败", fail: "提示输入\n代码" },
+      { text: "收集页面\n测试用例" },
+      { text: "存在用例", type: "decision", nextLabel: "是", failLabel: "否", fail: "提示添加\n测试用例" },
+      { text: "请求代码\n运行接口" },
+      { text: "后端校验\n运行参数", type: "decision", nextLabel: "通过", failLabel: "失败", fail: "返回参数\n错误" },
+      { text: "逐个执行\n测试用例" },
+      { text: "Docker编译\n运行代码" },
+      { text: "执行成功", type: "decision", nextLabel: "成功", failLabel: "失败", fail: "返回CE/TLE\n或RE" },
+      { text: "比较实际\n输出" },
+      { text: "当前用例\n通过", type: "decision", nextLabel: "通过", failLabel: "失败", fail: "返回WA\n停止后续" },
+      { text: "记录用例\n结果" },
+      { text: "还有用例", type: "decision", nextLabel: "有", failLabel: "无", fail: "汇总运行\n结果" },
+      { text: "前端展示\n运行明细" },
+      { text: "结束", type: "terminal" },
+    ],
+    rowGap: 78,
+  },
+  "fig-5-5-submit-async-judge-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "点击正式\n提交" },
+      { text: "用户已登录", type: "decision", nextLabel: "是", failLabel: "否", fail: "打开登录框\n结束" },
+      { text: "校验源码\n和语言", type: "decision", nextLabel: "通过", failLabel: "失败", fail: "提示补全\n提交信息" },
+      { text: "请求提交\n接口" },
+      { text: "查询已发布\n题目", type: "decision", nextLabel: "存在", failLabel: "无", fail: "返回题目\n不存在" },
+      { text: "创建提交\n状态QUEUED" },
+      { text: "增加提交\n次数" },
+      { text: "更新进度\nATTEMPTED" },
+      { text: "事务提交后\n投递判题" },
+      { text: "返回提交\n编号" },
+      { text: "前端开始\n轮询结果" },
+      { text: "判题线程\n读取提交" },
+      { text: "执行样例和\n隐藏用例" },
+      { text: "保存用例\n结果" },
+      { text: "汇总最终\n状态" },
+      { text: "最终AC", type: "decision", nextLabel: "是", failLabel: "否", fail: "保持尝试\n进度" },
+      { text: "更新通过\n次数进度" },
+      { text: "轮询获得\n最终结果" },
+      { text: "展示排名\n和明细" },
+      { text: "结束", type: "terminal" },
+    ],
+    rowGap: 74,
+  },
+  "fig-5-6-admin-problem-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "进入题目\n管理页" },
+      { text: "管理员权限\n校验", type: "decision", nextLabel: "通过", failLabel: "失败", fail: "返回403\n禁止访问" },
+      { text: "查询题目\n分页列表" },
+      { text: "选择新建\n或编辑" },
+      { text: "加载题目\n详情标签用例" },
+      { text: "维护题面\n限制参数" },
+      { text: "维护样例和\n隐藏用例" },
+      { text: "维护题目\n标签" },
+      { text: "测试用例\n完整", type: "decision", nextLabel: "完整", failLabel: "缺失", fail: "提示补全\n用例" },
+      { text: "保存题目\n基础信息" },
+      { text: "同步标签\n绑定关系" },
+      { text: "替换测试\n用例集合" },
+      { text: "需要发布\n或归档", type: "decision", nextLabel: "是", failLabel: "否", fail: "停留草稿\n刷新列表" },
+      { text: "检查判题\n环境" },
+      { text: "环境正常", type: "decision", nextLabel: "是", failLabel: "否", fail: "提示环境\n异常" },
+      { text: "更新题目\n发布状态" },
+      { text: "刷新管理\n列表" },
+      { text: "结束", type: "terminal" },
+    ],
+    rowGap: 76,
+  },
+  "fig-5-7-register-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "打开注册\n页签" },
+      { text: "选择邮箱\n或手机号" },
+      { text: "输入账号\n密码昵称" },
+      { text: "前端表单\n校验", type: "decision", nextLabel: "通过", failLabel: "失败", fail: "提示用户\n重新填写" },
+      { text: "提交注册\n请求" },
+      { text: "后端判断\n账号类型" },
+      { text: "账号格式\n正确", type: "decision", nextLabel: "正确", failLabel: "错误", fail: "返回格式\n错误" },
+      { text: "账号未占用", type: "decision", nextLabel: "是", failLabel: "否", fail: "返回账号\n已占用" },
+      { text: "生成唯一\n用户名" },
+      { text: "创建用户\n基础资料" },
+      { text: "绑定普通\n用户角色" },
+      { text: "生成双Token\n保存刷新令牌" },
+      { text: "返回登录态\n和用户信息" },
+      { text: "前端保存\n登录态" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-8-password-reset-request-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "点击忘记\n密码" },
+      { text: "输入账号\n标识" },
+      { text: "账号为空", type: "decision", nextLabel: "否", failLabel: "是", fail: "提示输入\n账号" },
+      { text: "提交重置\n申请" },
+      { text: "后端标准化\n账号" },
+      { text: "查询用户\n记录" },
+      { text: "用户存在", type: "decision", nextLabel: "是", failLabel: "否", fail: "静默返回\n提交成功" },
+      { text: "查询待处理\n申请" },
+      { text: "已有申请", type: "decision", nextLabel: "否", failLabel: "是", fail: "静默返回\n等待审核" },
+      { text: "创建重置\n申请记录" },
+      { text: "返回提交\n成功" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-9-logout-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "点击退出\n登录" },
+      { text: "调用退出\n接口" },
+      { text: "解析访问\nToken" },
+      { text: "Token有效", type: "decision", nextLabel: "有效", failLabel: "无效", fail: "本地退出\n清空状态" },
+      { text: "删除刷新\n令牌" },
+      { text: "加入访问\n令牌黑名单" },
+      { text: "返回退出\n成功" },
+      { text: "停止刷新\n定时器" },
+      { text: "清空本地\n登录态" },
+      { text: "跳转首页\n刷新导航" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-10-session-restore-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "应用启动\n读取缓存" },
+      { text: "存在\nAccessToken", type: "decision", nextLabel: "是", failLabel: "否", fail: "检查刷新\n令牌" },
+      { text: "恢复请求\n认证头" },
+      { text: "请求当前\n用户信息" },
+      { text: "用户加载\n成功", type: "decision", nextLabel: "成功", failLabel: "失败", fail: "清空登录态\n重新登录" },
+      { text: "保存用户\n资料" },
+      { text: "启动刷新\n定时器" },
+      { text: "访问令牌\n将过期", type: "decision", nextLabel: "是", failLabel: "否", fail: "继续等待\n下次检查" },
+      { text: "提交刷新\n令牌" },
+      { text: "刷新成功", type: "decision", nextLabel: "成功", failLabel: "失败", fail: "令牌失效\n重新登录" },
+      { text: "更新本地\n双Token" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-11-profile-load-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "进入个人\n资料页" },
+      { text: "请求用户\n完整详情" },
+      { text: "已登录", type: "decision", nextLabel: "是", failLabel: "否", fail: "返回未登录\n提示" },
+      { text: "获取当前\n用户ID" },
+      { text: "查询用户\n基础信息", type: "decision", nextLabel: "存在", failLabel: "无", fail: "用户不存在\n结束" },
+      { text: "查询角色\n列表" },
+      { text: "查询扩展\n资料" },
+      { text: "组装详情\n数据" },
+      { text: "前端填充\n表单" },
+      { text: "渲染头像\n和资料" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-12-profile-save-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "修改个人\n资料字段" },
+      { text: "点击保存\n资料" },
+      { text: "前端表单\n校验", type: "decision", nextLabel: "通过", failLabel: "失败", fail: "提示校验\n错误" },
+      { text: "组装更新\n数据" },
+      { text: "提交资料\n更新请求" },
+      { text: "后端获取\n用户ID" },
+      { text: "用户存在", type: "decision", nextLabel: "是", failLabel: "否", fail: "返回用户\n不存在" },
+      { text: "邮箱手机\n唯一校验", type: "decision", nextLabel: "通过", failLabel: "冲突", fail: "返回占用\n提示" },
+      { text: "更新用户\n基础信息" },
+      { text: "扩展资料\n存在", type: "decision", nextLabel: "存在", failLabel: "不存在", fail: "创建扩展\n资料" },
+      { text: "更新扩展\n资料" },
+      { text: "重新加载\n详情" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-13-avatar-upload-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "选择头像\n文件" },
+      { text: "校验格式\n和大小", type: "decision", nextLabel: "通过", failLabel: "失败", fail: "提示文件\n不合规" },
+      { text: "压缩裁剪\n为WebP" },
+      { text: "压缩成功", type: "decision", nextLabel: "成功", failLabel: "失败", fail: "提示压缩\n失败" },
+      { text: "上传头像\n文件" },
+      { text: "后端校验\n登录", type: "decision", nextLabel: "已登录", failLabel: "未登录", fail: "返回未登录\n提示" },
+      { text: "校验文件\n小于1MB", type: "decision", nextLabel: "通过", failLabel: "过大", fail: "返回文件\n过大" },
+      { text: "校验WebP\n格式", type: "decision", nextLabel: "通过", failLabel: "失败", fail: "返回格式\n错误" },
+      { text: "删除旧\n头像文件" },
+      { text: "保存新\n头像文件" },
+      { text: "更新头像\n地址" },
+      { text: "前端刷新\n头像" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-14-avatar-delete-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "点击删除\n头像" },
+      { text: "提交空文件\n表单" },
+      { text: "后端校验\n登录", type: "decision", nextLabel: "已登录", failLabel: "未登录", fail: "返回未登录\n提示" },
+      { text: "判断文件\n为空", type: "decision", nextLabel: "为空", failLabel: "非空", fail: "转入头像\n上传流程" },
+      { text: "查询当前\n用户头像" },
+      { text: "用户存在", type: "decision", nextLabel: "是", failLabel: "否", fail: "返回用户\n不存在" },
+      { text: "删除头像\n文件" },
+      { text: "清空头像\n字段" },
+      { text: "前端清空\n头像显示" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-15-security-update-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "进入账号\n安全页" },
+      { text: "加载用户\n详情" },
+      { text: "选择修改\n账号字段" },
+      { text: "打开编辑\n弹窗" },
+      { text: "输入新值" },
+      { text: "前端表单\n校验", type: "decision", nextLabel: "通过", failLabel: "失败", fail: "提示格式\n错误" },
+      { text: "提交字段\n修改请求" },
+      { text: "后端校验\n用户", type: "decision", nextLabel: "存在", failLabel: "无", fail: "返回用户\n不存在" },
+      { text: "新值未变化", type: "decision", nextLabel: "否", failLabel: "是", fail: "直接返回\n当前信息" },
+      { text: "唯一性\n校验", type: "decision", nextLabel: "通过", failLabel: "占用", fail: "返回已\n被占用" },
+      { text: "更新账号\n字段" },
+      { text: "刷新安全\n信息" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-16-password-update-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "点击修改\n密码" },
+      { text: "输入原密码\n新密码" },
+      { text: "确认新\n密码" },
+      { text: "前端表单\n校验", type: "decision", nextLabel: "通过", failLabel: "失败", fail: "提示密码\n规则错误" },
+      { text: "提交修改\n密码请求" },
+      { text: "后端校验\n用户", type: "decision", nextLabel: "存在", failLabel: "无", fail: "返回用户\n不存在" },
+      { text: "校验原\n密码", type: "decision", nextLabel: "正确", failLabel: "错误", fail: "返回原密码\n错误" },
+      { text: "新旧密码\n相同", type: "decision", nextLabel: "否", failLabel: "是", fail: "提示不能\n相同" },
+      { text: "加密新\n密码" },
+      { text: "更新密码\n字段" },
+      { text: "关闭弹窗\n清空表单" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-17-account-delete-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "点击注销\n账号" },
+      { text: "第一次\n确认" },
+      { text: "继续注销", type: "decision", nextLabel: "继续", failLabel: "取消", fail: "取消注销\n结束" },
+      { text: "第二次\n确认" },
+      { text: "最终确认", type: "decision", nextLabel: "确认", failLabel: "取消", fail: "取消注销\n结束" },
+      { text: "提交注销\n请求" },
+      { text: "后端校验\n用户", type: "decision", nextLabel: "存在", failLabel: "无", fail: "返回用户\n不存在" },
+      { text: "标记账号\n已注销" },
+      { text: "删除刷新\n令牌" },
+      { text: "停止刷新\n定时器" },
+      { text: "清空本地\n登录态" },
+      { text: "跳转首页" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-18-user-submissions-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "进入提交\n记录页" },
+      { text: "读取分页\n参数" },
+      { text: "请求我的\n提交记录" },
+      { text: "后端校验\n登录", type: "decision", nextLabel: "已登录", failLabel: "未登录", fail: "返回未登录\n提示" },
+      { text: "按用户ID\n查询提交" },
+      { text: "关联题目\n信息" },
+      { text: "统计分页\n总数" },
+      { text: "存在记录", type: "decision", nextLabel: "存在", failLabel: "无", fail: "展示空\n记录提示" },
+      { text: "渲染提交\n状态列表" },
+      { text: "切换分页\n重新查询" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-19-training-dashboard-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "进入训练\n看板页" },
+      { text: "请求训练\n统计接口" },
+      { text: "后端校验\n登录", type: "decision", nextLabel: "已登录", failLabel: "未登录", fail: "返回未登录\n提示" },
+      { text: "统计提交\n总量" },
+      { text: "统计题目\n通过情况" },
+      { text: "统计难度\n分布" },
+      { text: "查询最近\n提交记录" },
+      { text: "组装看板\n数据" },
+      { text: "存在数据", type: "decision", nextLabel: "是", failLabel: "否", fail: "展示默认\n空看板" },
+      { text: "渲染指标\n图表列表" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-20-problem-detail-init-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "进入做题\n页面" },
+      { text: "读取题号\n参数" },
+      { text: "题号合法", type: "decision", nextLabel: "合法", failLabel: "非法", fail: "显示参数\n错误" },
+      { text: "并行请求\n详情样例" },
+      { text: "查询已发布\n题目", type: "decision", nextLabel: "存在", failLabel: "无", fail: "显示题目\n不存在" },
+      { text: "查询标签\n用户进度" },
+      { text: "查询公开\n样例用例" },
+      { text: "加载语言\n模板" },
+      { text: "用户已登录", type: "decision", nextLabel: "是", failLabel: "否", fail: "跳过草稿\n读取" },
+      { text: "读取服务端\n草稿" },
+      { text: "草稿存在", type: "decision", nextLabel: "存在", failLabel: "无", fail: "使用默认\n模板" },
+      { text: "初始化\n编辑器" },
+      { text: "渲染题面\n和用例" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-21-sample-testcase-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "请求公开\n样例用例" },
+      { text: "后端按题号\n查询题目" },
+      { text: "题目存在", type: "decision", nextLabel: "是", failLabel: "否", fail: "返回题目\n不存在" },
+      { text: "查询SAMPLE\n测试用例" },
+      { text: "按序号\n排序" },
+      { text: "存在样例", type: "decision", nextLabel: "有", failLabel: "无", fail: "前端生成\n默认用例" },
+      { text: "返回样例\n输入输出" },
+      { text: "前端填充\n用例面板" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-22-code-draft-load-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "选择编程\n语言" },
+      { text: "用户已登录", type: "decision", nextLabel: "是", failLabel: "否", fail: "使用本地\n模板" },
+      { text: "请求当前\n语言草稿" },
+      { text: "后端校验\n用户" },
+      { text: "查询题目\n编号", type: "decision", nextLabel: "存在", failLabel: "无", fail: "返回题目\n不存在" },
+      { text: "查询用户\n草稿记录" },
+      { text: "草稿存在", type: "decision", nextLabel: "存在", failLabel: "无", fail: "返回空草稿\n使用模板" },
+      { text: "返回草稿\n源码" },
+      { text: "填充代码\n编辑器" },
+      { text: "更新同步\n状态" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-23-submission-poll-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "获得提交\n编号" },
+      { text: "显示排队\n或判题中" },
+      { text: "启动1秒\n轮询" },
+      { text: "请求提交\n结果接口" },
+      { text: "后端校验\n归属", type: "decision", nextLabel: "通过", failLabel: "失败", fail: "返回无权\n或不存在" },
+      { text: "返回提交\n状态明细" },
+      { text: "状态终态", type: "decision", nextLabel: "是", failLabel: "否", fail: "等待下次\n轮询" },
+      { text: "刷新题目\n详情" },
+      { text: "显示最终\n结果" },
+      { text: "达到轮询\n上限", type: "decision", nextLabel: "否", failLabel: "是", fail: "提示稍后\n查看记录" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-24-submission-detail-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "打开提交\n结果明细" },
+      { text: "请求提交\n结果接口" },
+      { text: "提交属于\n当前用户", type: "decision", nextLabel: "是", failLabel: "否", fail: "返回无权\n查看" },
+      { text: "查询提交\n基础信息" },
+      { text: "查询用例\n结果列表" },
+      { text: "隐藏用例\n脱敏处理" },
+      { text: "计算排名\n统计" },
+      { text: "组装提交\n结果VO" },
+      { text: "前端渲染\n状态摘要" },
+      { text: "展示失败\n用例明细" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-25-judge-dispatch-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "后端接收\n提交请求" },
+      { text: "校验用户\n登录", type: "decision", nextLabel: "通过", failLabel: "失败", fail: "返回未\n授权" },
+      { text: "查询已发布\n题目", type: "decision", nextLabel: "存在", failLabel: "无", fail: "返回题目\n不存在" },
+      { text: "插入提交\nQUEUED" },
+      { text: "增加题目\n提交次数" },
+      { text: "写入用户\n尝试进度" },
+      { text: "启用异步\n执行", type: "decision", nextLabel: "是", failLabel: "否", fail: "同步执行\n判题" },
+      { text: "注册事务\n提交回调" },
+      { text: "事务提交" },
+      { text: "投递判题\n线程池" },
+      { text: "线程池可用", type: "decision", nextLabel: "可用", failLabel: "满", fail: "调用线程\n执行任务" },
+      { text: "返回提交\n编号" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-26-judge-internal-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "读取提交\n记录" },
+      { text: "提交存在", type: "decision", nextLabel: "存在", failLabel: "无", fail: "直接结束\n不处理" },
+      { text: "读取题目\n信息" },
+      { text: "题目可用", type: "decision", nextLabel: "可用", failLabel: "不可用", fail: "置为\nSYSTEM_ERROR" },
+      { text: "查询样例和\n隐藏用例" },
+      { text: "存在判题\n用例", type: "decision", nextLabel: "存在", failLabel: "无", fail: "置为\nSYSTEM_ERROR" },
+      { text: "更新状态\nRUNNING" },
+      { text: "按顺序执行\n当前用例" },
+      { text: "Docker执行\n源码" },
+      { text: "转换用例\n结果" },
+      { text: "保存用例\n结果" },
+      { text: "当前用例\n通过", type: "decision", nextLabel: "通过", failLabel: "失败", fail: "中止后续\n用例" },
+      { text: "还有下一\n用例", type: "decision", nextLabel: "有", failLabel: "无", fail: "汇总最终\n状态" },
+      { text: "更新提交\n最终状态" },
+      { text: "最终AC", type: "decision", nextLabel: "是", failLabel: "否", fail: "保持\nATTEMPTED" },
+      { text: "更新通过\n次数" },
+      { text: "更新进度\nSOLVED" },
+      { text: "结束", type: "terminal" },
+    ],
+    rowGap: 74,
+  },
+  "fig-5-27-docker-execution-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "创建临时\n工作目录" },
+      { text: "写入源码\n和输入文件" },
+      { text: "语言需要\n编译", type: "decision", nextLabel: "需要", failLabel: "否", fail: "跳过编译\n直接运行" },
+      { text: "启动编译\n容器" },
+      { text: "编译成功", type: "decision", nextLabel: "成功", failLabel: "失败", fail: "返回CE\n错误信息" },
+      { text: "启动运行\n容器" },
+      { text: "运行超时", type: "decision", nextLabel: "否", failLabel: "是", fail: "强制删除\n返回TLE" },
+      { text: "退出码为0", type: "decision", nextLabel: "是", failLabel: "否", fail: "返回RE\n错误流" },
+      { text: "读取stdout\n和stderr" },
+      { text: "生成执行\n结果" },
+      { text: "清理临时\n目录容器" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-28-case-result-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "接收Docker\n执行结果" },
+      { text: "编译成功", type: "decision", nextLabel: "是", failLabel: "否", fail: "生成CE\n用例结果" },
+      { text: "是否超时", type: "decision", nextLabel: "否", failLabel: "是", fail: "生成TLE\n用例结果" },
+      { text: "运行成功", type: "decision", nextLabel: "是", failLabel: "否", fail: "生成RE\n用例结果" },
+      { text: "标准化输出\n文本" },
+      { text: "输出匹配", type: "decision", nextLabel: "匹配", failLabel: "不匹配", fail: "生成WA\n用例结果" },
+      { text: "生成AC\n用例结果" },
+      { text: "记录耗时\n错误信息" },
+      { text: "隐藏用例\n脱敏" },
+      { text: "保存到\n结果表" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-29-progress-update-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "提交创建\n完成" },
+      { text: "查询用户\n题目进度" },
+      { text: "进度存在", type: "decision", nextLabel: "存在", failLabel: "无", fail: "创建\nATTEMPTED" },
+      { text: "更新最后\n提交ID" },
+      { text: "判题结束\n读取状态" },
+      { text: "最终AC", type: "decision", nextLabel: "是", failLabel: "否", fail: "保持尝试\n状态" },
+      { text: "题目通过\n次数加一" },
+      { text: "进度更新\nSOLVED" },
+      { text: "保存提交\n和进度" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-30-admin-overview-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "打开管理\n控制台" },
+      { text: "管理员权限\n校验", type: "decision", nextLabel: "通过", failLabel: "失败", fail: "返回403\n禁止访问" },
+      { text: "并发请求\n三类数据" },
+      { text: "平台统计\n接口" },
+      { text: "用户统计\n接口" },
+      { text: "判题环境\n接口" },
+      { text: "请求全部\n成功", type: "decision", nextLabel: "成功", failLabel: "失败", fail: "提示加载\n失败" },
+      { text: "写入统计\n数据" },
+      { text: "渲染概览\n卡片" },
+      { text: "展示环境\n检查结果" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-31-admin-judge-health-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "请求环境\n健康接口" },
+      { text: "管理员权限\n校验", type: "decision", nextLabel: "通过", failLabel: "失败", fail: "返回403\n禁止访问" },
+      { text: "检查Docker\n可执行文件" },
+      { text: "Docker可用", type: "decision", nextLabel: "可用", failLabel: "不可用", fail: "后续检查\n标记DOWN" },
+      { text: "执行docker\nversion" },
+      { text: "执行docker\ninfo" },
+      { text: "检查C/C++\n镜像" },
+      { text: "检查Java\n镜像" },
+      { text: "检查Python\n镜像" },
+      { text: "命令全部\n成功", type: "decision", nextLabel: "成功", failLabel: "失败", fail: "记录异常\n或超时" },
+      { text: "汇总环境\n状态" },
+      { text: "返回检查\n结果" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-32-admin-user-list-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "打开用户\n管理页" },
+      { text: "加载用户\n列表" },
+      { text: "加载密码\n重置申请" },
+      { text: "输入关键词\n状态角色" },
+      { text: "组装分页\n筛选条件" },
+      { text: "管理员权限\n校验", type: "decision", nextLabel: "通过", failLabel: "失败", fail: "返回403\n禁止访问" },
+      { text: "后端分页\n查询用户" },
+      { text: "关联用户\n详情资料" },
+      { text: "返回分页\n结果" },
+      { text: "存在用户", type: "decision", nextLabel: "有", failLabel: "无", fail: "展示空\n列表" },
+      { text: "渲染用户\n表格" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-33-admin-user-detail-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "点击查看\n详情" },
+      { text: "请求用户\n详情" },
+      { text: "管理员权限\n校验", type: "decision", nextLabel: "通过", failLabel: "失败", fail: "返回403\n禁止访问" },
+      { text: "查询用户\n基础信息" },
+      { text: "用户存在", type: "decision", nextLabel: "存在", failLabel: "无", fail: "提示用户\n不存在" },
+      { text: "查询角色\n和扩展资料" },
+      { text: "保存选中\n用户" },
+      { text: "打开详情\n弹窗" },
+      { text: "展示用户\n资料" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-34-admin-user-edit-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "点击编辑\n用户" },
+      { text: "请求用户\n详情" },
+      { text: "用户存在", type: "decision", nextLabel: "存在", failLabel: "无", fail: "提示用户\n不存在" },
+      { text: "回填编辑\n表单" },
+      { text: "修改资料\n字段" },
+      { text: "点击确定\n提交" },
+      { text: "表单数据\n合法", type: "decision", nextLabel: "合法", failLabel: "非法", fail: "保留弹窗\n提示错误" },
+      { text: "调用更新\n用户接口" },
+      { text: "更新成功", type: "decision", nextLabel: "成功", failLabel: "失败", fail: "保留弹窗\n提示失败" },
+      { text: "关闭编辑\n弹窗" },
+      { text: "刷新用户\n列表" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-35-admin-user-status-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "点击状态\n操作" },
+      { text: "提交状态\n值" },
+      { text: "status存在", type: "decision", nextLabel: "存在", failLabel: "缺失", fail: "返回字段\n缺失" },
+      { text: "status范围\n0到2", type: "decision", nextLabel: "合法", failLabel: "非法", fail: "返回范围\n错误" },
+      { text: "查询目标\n用户" },
+      { text: "用户存在", type: "decision", nextLabel: "存在", failLabel: "无", fail: "返回用户\n不存在" },
+      { text: "更新用户\n状态" },
+      { text: "状态为禁用", type: "decision", nextLabel: "是", failLabel: "否", fail: "直接返回\n更新成功" },
+      { text: "删除刷新\n令牌" },
+      { text: "加入临时\n黑名单" },
+      { text: "刷新用户\n列表" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-36-admin-user-delete-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "点击删除\n用户" },
+      { text: "弹出确认\n提示" },
+      { text: "用户确认", type: "decision", nextLabel: "确认", failLabel: "取消", fail: "取消删除\n结束" },
+      { text: "调用删除\n用户接口" },
+      { text: "查询用户\n记录" },
+      { text: "用户存在", type: "decision", nextLabel: "存在", failLabel: "无", fail: "返回用户\n不存在" },
+      { text: "标记用户\n已删除" },
+      { text: "返回删除\n成功" },
+      { text: "刷新用户\n列表" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-37-admin-password-reset-review-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "加载待处理\n重置申请" },
+      { text: "点击同意\n或拒绝" },
+      { text: "读取申请\n记录" },
+      { text: "申请待处理", type: "decision", nextLabel: "是", failLabel: "否", fail: "提示申请\n已处理" },
+      { text: "审核操作\n为同意", type: "decision", nextLabel: "同意", failLabel: "拒绝", fail: "标记拒绝\n写入审核人" },
+      { text: "重置默认\n密码" },
+      { text: "清理用户\n登录令牌" },
+      { text: "标记审核\n通过" },
+      { text: "刷新申请\n列表" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-38-admin-problem-list-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "打开题库\n管理页" },
+      { text: "默认查询\n已发布题目" },
+      { text: "输入关键词\n切换状态" },
+      { text: "组装分页\n查询条件" },
+      { text: "管理员权限\n校验", type: "decision", nextLabel: "通过", failLabel: "失败", fail: "返回403\n禁止访问" },
+      { text: "查询题目\n分页数据" },
+      { text: "关联标签\n统计信息" },
+      { text: "返回分页\n列表" },
+      { text: "存在题目", type: "decision", nextLabel: "有", failLabel: "无", fail: "展示空\n列表" },
+      { text: "渲染题目\n表格" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-39-admin-problem-create-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "点击新建\n题目" },
+      { text: "生成默认\n题目内容" },
+      { text: "提交创建\n草稿请求" },
+      { text: "管理员权限\n校验", type: "decision", nextLabel: "通过", failLabel: "失败", fail: "返回403\n禁止访问" },
+      { text: "写入题目\n草稿" },
+      { text: "初始化提交\n通过次数" },
+      { text: "返回题目\nID" },
+      { text: "返回ID有效", type: "decision", nextLabel: "有效", failLabel: "无效", fail: "提示创建\n异常" },
+      { text: "跳转题目\n编辑页" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-40-admin-problem-edit-load-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "进入题目\n编辑页" },
+      { text: "读取题目\nID" },
+      { text: "并发加载\n三类数据" },
+      { text: "加载题目\n详情" },
+      { text: "加载标签\n列表" },
+      { text: "加载测试\n用例" },
+      { text: "三类数据\n成功", type: "decision", nextLabel: "成功", failLabel: "失败", fail: "提示加载\n失败" },
+      { text: "回填基础\n表单" },
+      { text: "拆分样例\n隐藏用例" },
+      { text: "渲染编辑\n页面" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-41-admin-problem-save-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "修改题目\n基础信息" },
+      { text: "修改标签\n和用例" },
+      { text: "点击保存\n按钮" },
+      { text: "已有保存\n任务", type: "decision", nextLabel: "否", failLabel: "是", fail: "忽略重复\n提交" },
+      { text: "更新题目\n信息" },
+      { text: "计算新增\n标签" },
+      { text: "绑定新增\n标签" },
+      { text: "计算移除\n标签" },
+      { text: "移除旧\n标签" },
+      { text: "规范化用例\n顺序" },
+      { text: "用例类型\n合法", type: "decision", nextLabel: "合法", failLabel: "非法", fail: "提示用例\n类型错误" },
+      { text: "替换测试\n用例集合" },
+      { text: "重新加载\n详情用例" },
+      { text: "提示保存\n成功" },
+      { text: "结束", type: "terminal" },
+    ],
+    rowGap: 78,
+  },
+  "fig-5-42-admin-testcase-maintain-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "打开测试\n用例区域" },
+      { text: "选择样例\n或隐藏" },
+      { text: "新增编辑\n删除用例" },
+      { text: "输入输出\n完整", type: "decision", nextLabel: "完整", failLabel: "缺失", fail: "提示补全\n用例内容" },
+      { text: "整理排序\n编号" },
+      { text: "提交批量\n替换请求" },
+      { text: "后端校验\n题目", type: "decision", nextLabel: "存在", failLabel: "无", fail: "返回题目\n不存在" },
+      { text: "删除旧\n测试用例" },
+      { text: "批量写入\n新用例" },
+      { text: "返回保存\n成功" },
+      { text: "刷新用例\n列表" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-43-admin-problem-publish-archive-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "点击发布\n或归档" },
+      { text: "按钮状态\n允许", type: "decision", nextLabel: "允许", failLabel: "禁止", fail: "不显示或\n禁止操作" },
+      { text: "调用状态\n变更接口" },
+      { text: "管理员权限\n校验", type: "decision", nextLabel: "通过", failLabel: "失败", fail: "返回403\n禁止访问" },
+      { text: "读取题目\n记录" },
+      { text: "题目存在", type: "decision", nextLabel: "存在", failLabel: "无", fail: "返回题目\n不存在" },
+      { text: "更新发布\n或归档状态" },
+      { text: "记录更新\n用户" },
+      { text: "刷新题目\n列表" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-44-admin-tag-list-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "打开标签\n管理页" },
+      { text: "请求标签\n列表" },
+      { text: "管理员权限\n校验", type: "decision", nextLabel: "通过", failLabel: "失败", fail: "返回403\n禁止访问" },
+      { text: "查询全部\n标签" },
+      { text: "按名称\n排序" },
+      { text: "存在标签", type: "decision", nextLabel: "有", failLabel: "无", fail: "展示空\n状态" },
+      { text: "写入标签\n数组" },
+      { text: "渲染标签\n表格" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-45-admin-tag-save-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "输入标签\n名称类型" },
+      { text: "点击创建\n或保存" },
+      { text: "名称为空", type: "decision", nextLabel: "否", failLabel: "是", fail: "提示名称\n不能为空" },
+      { text: "当前为编辑", type: "decision", nextLabel: "是", failLabel: "否", fail: "创建新\n标签" },
+      { text: "提交更新\n标签请求" },
+      { text: "后端校验\n名称唯一", type: "decision", nextLabel: "唯一", failLabel: "重复", fail: "返回名称\n重复" },
+      { text: "写入标签\n数据" },
+      { text: "重置编辑\n表单" },
+      { text: "刷新标签\n列表" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-46-admin-tag-delete-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "点击删除\n标签" },
+      { text: "浏览器确认\n提示" },
+      { text: "用户确认", type: "decision", nextLabel: "确认", failLabel: "取消", fail: "取消删除\n结束" },
+      { text: "调用删除\n标签接口" },
+      { text: "查询标签\n记录" },
+      { text: "标签存在", type: "decision", nextLabel: "存在", failLabel: "无", fail: "直接结束\n刷新列表" },
+      { text: "删除题目\n标签关联" },
+      { text: "删除标签\n记录" },
+      { text: "刷新标签\n列表" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-47-admin-problem-tag-bind-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "在题目编辑\n选择标签" },
+      { text: "计算当前\n标签集合" },
+      { text: "存在新增\n标签", type: "decision", nextLabel: "有", failLabel: "无", fail: "跳过绑定\n步骤" },
+      { text: "逐个调用\n绑定接口" },
+      { text: "存在移除\n标签", type: "decision", nextLabel: "有", failLabel: "无", fail: "跳过解绑\n步骤" },
+      { text: "逐个调用\n解绑接口" },
+      { text: "接口全部\n成功", type: "decision", nextLabel: "成功", failLabel: "失败", fail: "提示标签\n同步失败" },
+      { text: "更新原始\n标签集合" },
+      { text: "刷新题目\n详情" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-48-admin-navigation-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "进入管理端\n路由" },
+      { text: "路由守卫\n校验登录" },
+      { text: "具备管理员\n角色", type: "decision", nextLabel: "具备", failLabel: "不足", fail: "跳回首页\n提示无权" },
+      { text: "读取当前\n子路由" },
+      { text: "匹配侧边\n菜单" },
+      { text: "匹配成功", type: "decision", nextLabel: "成功", failLabel: "失败", fail: "默认管理\n控制台" },
+      { text: "高亮菜单\n更新标题" },
+      { text: "渲染对应\n子页面" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+};
+
+function flowFigure(kind) {
+  const config = flowDefinitions[kind];
+  if (!config) {
+    return svg(320, 120, box(45, 38, 230, 44, "未定义流程图", "box", "txt small"));
+  }
+
+  const nodes = config.nodes;
+  const rowGap = config.rowGap || 82;
+  const top = config.top || 40;
+  const cx = config.cx || 250;
+  const branchX = config.branchX || 455;
+  const branchW = config.branchW || 150;
+  const branchEndX = branchX + branchW + 26;
+  const branchEndW = config.branchEndW || 76;
+  const w = branchEndX + branchEndW + 34;
+  const h = top + (nodes.length - 1) * rowGap + 58;
+  let connectors = "";
+  let shapes = "";
+
+  function nodeInfo(node, i) {
+    const cy = top + i * rowGap;
+    const isTerminal = node.type === "terminal";
+    const isDecision = node.type === "decision";
+    const processW = node.w || 170;
+    const processH = node.h || 44;
+    if (isTerminal) {
+      const tw = node.w || 92;
+      const th = node.h || 34;
+      return { ...node, isTerminal, isDecision, cx, cy, left: cx - tw / 2, right: cx + tw / 2, top: cy - th / 2, bottom: cy + th / 2, w: tw, h: th };
+    }
+    if (isDecision) {
+      const dw = node.w || 122;
+      const dh = node.h || 62;
+      return { ...node, isTerminal, isDecision, cx, cy, left: cx - dw / 2, right: cx + dw / 2, top: cy - dh / 2, bottom: cy + dh / 2, w: dw, h: dh };
+    }
+    return { ...node, isTerminal, isDecision, cx, cy, left: cx - processW / 2, right: cx + processW / 2, top: cy - processH / 2, bottom: cy + processH / 2, w: processW, h: processH };
+  }
+
+  const layout = nodes.map((node, i) => nodeInfo(node, i));
+  layout.forEach((node) => {
+    if (node.isTerminal) shapes += roundBox(node.left, node.top, node.w, node.h, node.text, "txt small");
+    else if (node.isDecision) shapes += diamond(node.cx, node.cy, node.w, node.h, node.text, "txt tiny");
+    else shapes += box(node.left, node.top, node.w, node.h, node.text, "box", "txt small");
+  });
+
+  for (let i = 0; i < layout.length - 1; i++) {
+    const cur = layout[i];
+    const next = layout[i + 1];
+    connectors += line(cur.cx, cur.bottom, next.cx, next.top, true);
+    if (cur.nextLabel) connectors += label(cur.cx + 34, (cur.bottom + next.top) / 2, cur.nextLabel, "txt tiny");
+  }
+
+  layout.filter((node) => node.fail).forEach((node) => {
+    const branchY = node.cy;
+    connectors += line(node.right, branchY, branchX, branchY, true);
+    connectors += label((node.right + branchX) / 2, branchY - 16, node.failLabel || "否", "txt tiny");
+    shapes += box(branchX, branchY - 22, branchW, 44, node.fail, "box", "txt small");
+    connectors += line(branchX + branchW, branchY, branchEndX, branchY, true);
+    shapes += roundBox(branchEndX, branchY - 17, branchEndW, 34, "结束", "txt small");
+  });
+
+  return svg(w, h, shapes + connectors);
+}
+
+const flowRenderers = Object.fromEntries(
+  Object.keys(flowDefinitions).map((id) => [id, () => flowFigure(id)])
+);
+
+const renderers = {
+  "fig-3-1-function-modules": functionModules,
+  "fig-3-2-top-dfd": topDfd,
+  "fig-3-3-zero-dfd": zeroDfd,
+  "fig-3-4-level1-judge-dfd": level1Dfd,
+  "fig-4-1-architecture": architecture,
+  "fig-4-2-deployment": deployment,
+  "fig-4-3-user-entity": () => entityFigure("fig-4-3-user-entity"),
+  "fig-4-4-problem-entity": () => entityFigure("fig-4-4-problem-entity"),
+  "fig-4-5-tag-entity": () => entityFigure("fig-4-5-tag-entity"),
+  "fig-4-6-testcase-entity": () => entityFigure("fig-4-6-testcase-entity"),
+  "fig-4-7-code-draft-entity": () => entityFigure("fig-4-7-code-draft-entity"),
+  "fig-4-8-submission-entity": () => entityFigure("fig-4-8-submission-entity"),
+  "fig-4-9-submission-case-result-entity": () => entityFigure("fig-4-9-submission-case-result-entity"),
+  "fig-4-10-user-problem-progress-entity": () => entityFigure("fig-4-10-user-problem-progress-entity"),
+  "fig-4-11-er-overview": erOverview,
+  "fig-4-12-jwt-auth-flow": () => flowFigure("fig-4-12-jwt-auth-flow"),
+  "fig-5-1-login-flow": () => flowFigure("fig-5-1-login-flow"),
+  "fig-5-2-problem-filter-flow": () => flowFigure("fig-5-2-problem-filter-flow"),
+  "fig-5-3-code-draft-flow": () => flowFigure("fig-5-3-code-draft-flow"),
+  "fig-5-4-code-run-flow": () => flowFigure("fig-5-4-code-run-flow"),
+  "fig-5-5-submit-async-judge-flow": () => flowFigure("fig-5-5-submit-async-judge-flow"),
+  "fig-5-6-admin-problem-flow": () => flowFigure("fig-5-6-admin-problem-flow"),
+  ...flowRenderers,
+};
+
+document.querySelector("#app").innerHTML = Object.entries(renderers).map(([id, fn]) =>
+  `<section class="diagram" id="${id}">${fn()}</section>`
+).join("");
+</script>
+</body>
+</html>
