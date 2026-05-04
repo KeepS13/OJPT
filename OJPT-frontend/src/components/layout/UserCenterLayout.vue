@@ -89,12 +89,13 @@ const isActive = (path: string) => {
 <style scoped>
 .user-center-layout {
   display: flex;
-  min-height: calc(100vh - 60px);
+  width: 100%;
+  min-height: 100%;
   background-color: #f5f5f7;
 }
 
 .user-center-sidebar {
-  width: 240px;
+  flex: 0 0 240px;
   background-color: #ffffff;
   border-right: 1px solid #e5e7eb;
   padding: 24px 0;
@@ -182,7 +183,8 @@ const isActive = (path: string) => {
 
 .user-center-main {
   flex: 1;
+  min-width: 0;
   padding: 24px;
-  overflow-y: auto;
+  overflow: visible;
 }
 </style>
