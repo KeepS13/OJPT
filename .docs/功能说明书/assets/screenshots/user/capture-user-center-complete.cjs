@@ -6,6 +6,7 @@ const baseUrl = 'http://127.0.0.1:8110'
 const apiBase = 'http://127.0.0.1:8111'
 const outputDir = __dirname
 const avatarPath = path.join(outputDir, 'user-temp-avatar.png')
+const executablePath = process.env.PLAYWRIGHT_EXECUTABLE_PATH || 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'
 let accessToken = ''
 
 async function settle(page) {
@@ -100,7 +101,7 @@ async function closeDialog(page) {
 async function main() {
   await ensureTempAvatar()
 
-  const browser = await chromium.launch({ headless: true })
+  const browser = await chromium.launch({ headless: true, executablePath })
   const page = await browser.newPage({
     viewport: { width: 1440, height: 1000 },
     deviceScaleFactor: 1,

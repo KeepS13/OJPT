@@ -7,6 +7,7 @@ const { chromium } = playwright
 const baseUrl = process.env.OJPT_FRONTEND_URL || 'http://127.0.0.1:8110'
 const apiUrl = process.env.OJPT_BACKEND_URL || 'http://127.0.0.1:8111'
 const outDir = path.dirname(fileURLToPath(import.meta.url))
+const executablePath = process.env.PLAYWRIGHT_EXECUTABLE_PATH || 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'
 
 const shot = async (target, name) => {
   await target.screenshot({
@@ -120,7 +121,7 @@ int main() {
 }
 `
 
-const browser = await chromium.launch({ headless: true })
+const browser = await chromium.launch({ headless: true, executablePath })
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 })
 
 const loginData = await login()

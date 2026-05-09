@@ -14,10 +14,10 @@ async function loginAsAdmin(page: import('@playwright/test').Page) {
   await expect(page.getByText('登录成功')).toBeVisible()
 }
 
-test('管理员登录后可以访问后台数据概览看板', async ({ page }) => {
+test('管理员登录后可以访问管理端数据概览看板', async ({ page }) => {
   await loginAsAdmin(page)
 
-  // 直接访问后台首页路由，会触发路由守卫中的角色校验与统计接口加载
+  // 直接访问管理端首页路由，会触发路由守卫中的角色校验与统计接口加载
   await page.goto('/admin')
 
   // 顶部标题应显示“数据概览”

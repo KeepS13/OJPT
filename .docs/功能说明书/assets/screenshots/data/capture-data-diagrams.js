@@ -3,6 +3,7 @@ const { chromium } = require("../../../../../OJPT-frontend/node_modules/playwrig
 
 const baseDir = __dirname;
 const htmlPath = path.join(baseDir, "data-model-diagrams.html");
+const executablePath = process.env.PLAYWRIGHT_EXECUTABLE_PATH || "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
 const targets = [
   ["user-model", "data-01-user-profile-role-model.png"],
   ["problem-model", "data-02-problem-bank-model.png"],
@@ -12,7 +13,7 @@ const targets = [
 ];
 
 (async () => {
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({ headless: true, executablePath });
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
   await page.goto(`file://${htmlPath.replace(/\\/g, "/")}`);
   await page.emulateMedia({ media: "screen" });

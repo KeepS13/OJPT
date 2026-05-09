@@ -1,0 +1,1 @@
+import{g as t,p as n}from"./vendor-markdown-CexhmMeb.js";function f(r){if(!r)return"";const e=t.parse(r,{breaks:!0,gfm:!0});return typeof window<"u"?n.sanitize(e,{USE_PROFILES:{html:!0}}):e}export{f as r};

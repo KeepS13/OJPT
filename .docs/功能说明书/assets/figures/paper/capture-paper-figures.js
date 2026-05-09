@@ -3,6 +3,7 @@ const { chromium } = require("../../../../../OJPT-frontend/node_modules/playwrig
 
 const baseDir = __dirname;
 const htmlPath = path.join(baseDir, "paper-engineering-figures.html");
+const executablePath = process.env.PLAYWRIGHT_EXECUTABLE_PATH || "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
 
 const targetIds = [
   "fig-3-1-function-modules",
@@ -74,7 +75,7 @@ const targetIds = [
 const targets = targetIds.map((id) => [id, `${id}.png`]);
 
 (async () => {
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({ headless: true, executablePath });
   const page = await browser.newPage({
     viewport: { width: 1480, height: 1100 },
     deviceScaleFactor: 1,

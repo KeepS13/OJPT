@@ -137,7 +137,7 @@ const loadCurrentUserProfile = async (
   }
 }
 
-// 后台定时器：定期检查token状态并主动刷新
+// 认证续期定时器：定期检查 token 状态并主动刷新
 const startTokenRefreshTimer = () => {
   if (refreshTimerId) {
     clearInterval(refreshTimerId)

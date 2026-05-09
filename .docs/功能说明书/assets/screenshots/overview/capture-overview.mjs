@@ -5,8 +5,9 @@ import { fileURLToPath } from 'node:url'
 const outDir = dirname(fileURLToPath(import.meta.url))
 const frontBase = 'http://127.0.0.1:8110'
 const backBase = 'http://127.0.0.1:8111'
+const executablePath = process.env.PLAYWRIGHT_EXECUTABLE_PATH || 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'
 
-const browser = await chromium.launch({ headless: true })
+const browser = await chromium.launch({ headless: true, executablePath })
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } })
 
 async function capture(name, options = {}) {

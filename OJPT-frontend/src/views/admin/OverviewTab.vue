@@ -106,7 +106,7 @@ onMounted(() => {
           <div class="section-heading">
             <div>
               <h2 class="section-title">平台概览</h2>
-              <p class="section-copy">展示管理后台统计接口返回的核心汇总数据。</p>
+              <p class="section-copy">展示管理端统计接口返回的核心汇总数据。</p>
             </div>
           </div>
 

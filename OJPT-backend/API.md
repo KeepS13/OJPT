@@ -161,4 +161,4 @@
 - `/api/admin/roles/**`
 - `/api/admin/permissions/**`
 - `/api/admin/schools/**`
-- 多角色分配、角色权限 CRUD、学校后台治理说明
+- 多角色分配、角色权限 CRUD、学校管理端治理说明

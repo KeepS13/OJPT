@@ -412,7 +412,7 @@
     <p class="source">来源：Flyway V1_0 problem_code_draft、submission、submission_case_result、user_problem_progress 表；关联 user/problem。</p>
     <div class="model-grid submit-grid">
       <article class="table-card green">
-        <div class="table-title">problem_code_draft <span>代码草稿</span></div>
+        <div class="table-title">problem_code_draft <span>代码编辑内容</span></div>
         <table>
           <tr><td>id</td><td>BIGINT UNSIGNED PK</td></tr>
           <tr><td>user_id</td><td>BIGINT UNSIGNED</td></tr>
@@ -489,7 +489,7 @@
       <article class="flow-card">
         <h2>题目状态 problem.status</h2>
         <div class="flow">
-          <div class="node status-dim">DRAFT<small>草稿</small></div>
+          <div class="node status-dim">DRAFT<small>待发布</small></div>
           <span class="arrow">→</span>
           <div class="node status-ok">PUBLISHED<small>已发布</small></div>
           <span class="arrow">→</span>
@@ -590,7 +590,7 @@
       </div>
       <div class="schema-row">
         <div class="schema-cell">problem_code_draft</div>
-        <div class="schema-cell">用户在题目和语言维度上的代码草稿。</div>
+        <div class="schema-cell">用户在题目和语言维度上的代码编辑内容。</div>
         <div class="schema-cell">无</div>
         <div class="schema-cell">uk_user_problem_lang</div>
       </div>

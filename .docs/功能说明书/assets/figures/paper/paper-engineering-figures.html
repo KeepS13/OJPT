@@ -128,44 +128,87 @@ function store(x, y, w, h, code, name) {
   return `${line(x, y, x + w, y)}${line(x, y + h, x + w, y + h)}${tspans(`${code}\n${name}`, x + w / 2, y + h / 2, 15, "txt small")}`;
 }
 
+function stackedFeatureBox(x, y, w, items, rowHeight = 18, textCls = "txt tiny") {
+  const innerTop = y + 4;
+  const h = items.length * rowHeight + 8;
+  let s = `<rect class="box" x="${x}" y="${y}" width="${w}" height="${h}"></rect>`;
+  items.forEach((item, i) => {
+    if (i > 0) {
+      const dividerY = innerTop + i * rowHeight;
+      s += line(x, dividerY, x + w, dividerY);
+    }
+    s += tspans(item, x + w / 2, innerTop + i * rowHeight + rowHeight / 2, 14, textCls);
+  });
+  return s;
+}
+
+function verticalText(text) {
+  return Array.from(String(text)).join("\n");
+}
+
+function verticalFeatureBox(x, y, w, h, text, textCls = "txt tiny") {
+  return `<rect class="box" x="${x}" y="${y}" width="${w}" height="${h}"></rect>${tspans(verticalText(text), x + w / 2, y + h / 2, 12, textCls)}`;
+}
+
 function functionModules() {
   let s = "";
-  s += box(450, 20, 240, 44, "OJPT 在线编程训练平台", "box", "txt small bold");
-  s += box(240, 110, 110, 40, "管理端", "box", "txt");
-  s += box(790, 110, 110, 40, "用户端", "box", "txt");
-  s += poly([[570,64],[570,84],[295,84],[295,110]], true);
-  s += poly([[570,64],[570,84],[845,84],[845,110]], true);
-  const admin = [
-    ["用户\n管理", "状态编辑\n重置审批"],
-    ["题库\n管理", "草稿发布\n归档维护"],
-    ["题目\n编辑", "题面标签\n测试用例"],
-    ["标签\n管理", "新增编辑\n删除标签"],
-    ["判题\n健康", "Docker\n镜像检查"],
-    ["数据\n概览", "统计卡片\n提交分布"],
+  const modules = [
+    { title: "认证与账号", features: ["用户登录", "用户注册", "会话恢复", "密码重置"] },
+    { title: "题库浏览", features: ["题目检索", "条件筛选", "分页查看", "详情入口"] },
+    { title: "在线做题", features: ["题面阅读", "代码编辑", "内容保存", "样例运行"] },
+    { title: "提交判题", features: ["正式提交", "异步判题", "结果轮询", "进度更新"] },
+    { title: "训练数据", features: ["训练看板", "提交记录", "个人资料", "账号安全"] },
+    { title: "用户管理", features: ["用户列表", "详情查看", "状态修改", "重置审批"] },
+    { title: "题目管理", features: ["题目新增", "题面编辑", "用例维护", "标签绑定"] },
+    { title: "平台监控", features: ["统计概览", "状态分布", "镜像检查", "健康检测"] },
   ];
-  const user = [
-    ["账号\n认证", "登录注册\n账号安全"],
-    ["题库\n浏览", "筛选搜索\n分页查看"],
-    ["题目\n作答", "题面阅读\n代码编辑"],
-    ["代码\n运行", "自定义\n测试用例"],
-    ["正式\n提交", "异步判题\n结果轮询"],
-    ["训练\n数据", "看板记录\n进度状态"],
-  ];
-  function branch(items, startX, rootX) {
-    const y1 = 205, y2 = 340, gap = 90;
-    s += line(rootX, 150, rootX, 178);
-    s += line(startX, 178, startX + (items.length - 1) * gap, 178);
-    items.forEach((item, i) => {
-      const x = startX + i * gap;
-      s += line(x, 178, x, y1);
-      s += box(x - 24, y1, 48, 82, item[0], "box", "txt small");
-      s += line(x, y1 + 82, x, y2);
-      s += box(x - 41, y2, 82, 52, item[1], "box", "txt tiny");
+
+  const svgW = 1060;
+  const svgH = 340;
+  const rootW = 250;
+  const rootH = 42;
+  const moduleW = 92;
+  const moduleH = 34;
+  const opW = 24;
+  const opH = 116;
+  const opGap = 4;
+  const groupGap = 12;
+  const marginX = 50;
+  const rootY = 18;
+  const moduleY = 86;
+  const branchY = 148;
+  const opY = 174;
+  const groupW = opW * 4 + opGap * 3;
+
+  const rootX = (svgW - rootW) / 2;
+  const rootCenterX = rootX + rootW / 2;
+  const topLineY = 64;
+  const firstCenterX = marginX + groupW / 2;
+  const lastCenterX = marginX + (modules.length - 1) * (groupW + groupGap) + groupW / 2;
+
+  s += box(rootX, rootY, rootW, rootH, "OJPT 在线编程训练平台", "box", "txt small bold");
+  s += line(rootCenterX, rootY + rootH, rootCenterX, topLineY);
+  s += line(firstCenterX, topLineY, lastCenterX, topLineY);
+
+  modules.forEach((module, i) => {
+    const groupX = marginX + i * (groupW + groupGap);
+    const centerX = groupX + groupW / 2;
+    const moduleX = groupX + (groupW - moduleW) / 2;
+    const firstOpCenterX = groupX + opW / 2;
+    const lastOpCenterX = groupX + groupW - opW / 2;
+    s += line(centerX, topLineY, centerX, moduleY);
+    s += box(moduleX, moduleY, moduleW, moduleH, module.title, "box", "txt small");
+    s += line(centerX, moduleY + moduleH, centerX, branchY);
+    s += line(firstOpCenterX, branchY, lastOpCenterX, branchY);
+    module.features.forEach((feature, j) => {
+      const opX = groupX + j * (opW + opGap);
+      const opCenterX = opX + opW / 2;
+      s += line(opCenterX, branchY, opCenterX, opY);
+      s += verticalFeatureBox(opX, opY, opW, opH, feature);
     });
-  }
-  branch(admin, 70, 295);
-  branch(user, 620, 845);
-  return svg(1140, 430, s);
+  });
+
+  return svg(svgW, svgH, s);
 }
 
 function topDfd() {
@@ -209,7 +252,7 @@ function zeroDfd() {
 
   s += circle(245, 78, 45, "P1\n用户认证");
   s += circle(450, 150, 45, "P2\n题库浏览");
-  s += circle(300, 285, 45, "P3\n作答草稿");
+  s += circle(300, 285, 45, "P3\n在线做题");
   s += circle(570, 285, 45, "P4\n运行判题");
   s += circle(570, 455, 45, "P5\n训练数据");
   s += circle(245, 455, 45, "P6\n管理维护");
@@ -271,14 +314,14 @@ function level1Dfd() {
   s += box(28, 45, 90, 40, "管理员", "box", "txt small");
   s += box(690, 105, 115, 44, "Docker\n判题环境", "box", "txt tiny");
 
-  s += store(335, 165, 110, 36, "D3-1", "代码草稿表");
+  s += store(335, 165, 110, 36, "D3-1", "代码编辑内容表");
   s += store(495, 165, 110, 36, "D2", "测试用例表");
   s += store(680, 248, 115, 36, "D3-2", "提交记录表");
   s += store(680, 368, 115, 36, "D3-3", "用例结果表");
   s += store(390, 440, 110, 36, "D3-4", "进度表");
 
   s += circle(230, 270, 43, "P3.1\n读取题目");
-  s += circle(390, 270, 43, "P3.2\n编辑草稿");
+  s += circle(390, 270, 43, "P3.2\n编辑代码");
   s += circle(550, 270, 43, "P3.3\n提交判题");
   s += circle(550, 390, 43, "P3.4\n保存结果");
   s += circle(310, 390, 43, "P3.5\n展示结果");
@@ -356,8 +399,8 @@ const entityData = {
   "fig-4-4-problem-entity": ["题目", ["题目ID","题号","标题","难度","题面Markdown","时间限制","内存限制","题目状态","提交次数","通过次数"]],
   "fig-4-5-tag-entity": ["标签", ["标签ID","标签名称","标签类型","题目ID","绑定时间"]],
   "fig-4-6-testcase-entity": ["测试用例", ["用例ID","题目ID","用例类型","输入数据","期望输出","样例说明","排序号"]],
-  "fig-4-7-code-draft-entity": ["代码草稿", ["草稿ID","用户ID","题目ID","语言","源代码","创建时间","更新时间"]],
-  "fig-4-8-submission-entity": ["提交记录", ["提交ID","用户ID","题目ID","语言","源代码","判题状态","耗时","内存","编译信息","判题信息"]],
+  "fig-4-7-code-draft-entity": ["代码编辑内容", ["编辑内容ID","用户ID","题目ID","语言","源代码","创建时间","更新时间"]],
+  "fig-4-8-submission-entity": ["提交记录", ["提交ID","用户ID","题目ID","语言","源代码","判题状态","耗时","编译信息","判题信息"]],
   "fig-4-9-submission-case-result-entity": ["提交用例结果", ["结果ID","提交ID","用例类型","用例序号","状态","输入","期望输出","实际输出","错误输出","耗时"]],
   "fig-4-10-user-problem-progress-entity": ["用户题目进度", ["进度ID","用户ID","题目ID","进度状态","最近提交ID","更新时间"]]
 };
@@ -367,7 +410,7 @@ const primaryKeyData = {
   "fig-4-4-problem-entity": "题目ID",
   "fig-4-5-tag-entity": "标签ID",
   "fig-4-6-testcase-entity": "用例ID",
-  "fig-4-7-code-draft-entity": "草稿ID",
+  "fig-4-7-code-draft-entity": "编辑内容ID",
   "fig-4-8-submission-entity": "提交ID",
   "fig-4-9-submission-case-result-entity": "结果ID",
   "fig-4-10-user-problem-progress-entity": "进度ID"
@@ -404,7 +447,7 @@ function erOverview() {
   let nodes = "";
   const graph = {};
   const erPrimaryKeys = {
-    draft: "草稿ID",
+    draft: "编辑内容ID",
     problem: "题目ID",
     case: "用例ID",
     profile: "资料ID",
@@ -463,8 +506,8 @@ function erOverview() {
     if (card) links += label(x1 + (x2 - x1) * t + dx, y1 + (y2 - y1) * t + dy, card, "txt tiny");
   }
 
-  attrEntity("draft", 300, 145, 96, 34, "代码草稿", [
-    [215, 72, "草稿ID"], [330, 62, "创建时间"], [205, 145, "语言"], [230, 230, "源代码"], [385, 225, "题目ID"]
+  attrEntity("draft", 300, 145, 120, 34, "代码编辑内容", [
+    [205, 72, "编辑内容ID"], [340, 62, "创建时间"], [205, 145, "语言"], [230, 230, "源代码"], [385, 225, "题目ID"]
   ]);
   attrEntity("problem", 610, 145, 82, 34, "题目", [
     [520, 72, "题目ID"], [585, 52, "题号"], [650, 52, "标题"], [720, 78, "难度"], [545, 235, "题目状态"]
@@ -591,13 +634,13 @@ function legacyFlowFigure(kind) {
         { text: "加载题目详情\n和样例用例" },
         { text: "选择语言\n生成模板" },
         { text: "用户已登录", type: "decision", nextLabel: "是", fail: "仅本地编辑\n提示登录保存" },
-        { text: "查询当前语言\n代码草稿" },
-        { text: "存在则加载草稿\n否则使用模板" },
+        { text: "查询当前语言\n编辑内容" },
+        { text: "存在则加载内容\n否则使用模板" },
         { text: "填充编辑器\n初始化历史" },
         { text: "监听代码输入" },
         { text: "800ms防抖\n触发保存" },
         { text: "内容满足\n保存条件", type: "decision", nextLabel: "满足", fail: "跳过保存\n保持当前状态" },
-        { text: "PUT保存草稿" },
+        { text: "PUT保存\n编辑内容" },
         { text: "后端按用户\n题目和语言Upsert" },
         { text: "返回保存状态" },
         { text: "结束", type: "terminal" },
@@ -650,7 +693,7 @@ function legacyFlowFigure(kind) {
         { text: "开始", type: "terminal" },
         { text: "进入题库\n管理页" },
         { text: "管理员权限\n校验", type: "decision", nextLabel: "通过", fail: "返回403\n禁止访问" },
-        { text: "新建题目\n或打开草稿" },
+        { text: "新建题目\n或打开题目" },
         { text: "编辑题号\n标题难度限制" },
         { text: "编辑题面\nMarkdown" },
         { text: "维护样例\n和隐藏用例" },
@@ -785,13 +828,13 @@ const flowDefinitions = {
       { text: "监听代码\n变化" },
       { text: "启动防抖\n计时器" },
       { text: "满足保存\n条件", type: "decision", nextLabel: "满足", failLabel: "否", fail: "跳过保存\n保持本地" },
-      { text: "用户已登录", type: "decision", nextLabel: "是", failLabel: "否", fail: "提示登录后\n同步草稿" },
-      { text: "提交草稿\n保存请求" },
+        { text: "用户已登录", type: "decision", nextLabel: "是", failLabel: "否", fail: "提示登录后\n同步内容" },
+        { text: "提交编辑\n内容请求" },
       { text: "后端查询\n题目信息", type: "decision", nextLabel: "存在", failLabel: "无", fail: "保存失败\n题目无效" },
-      { text: "查询已有\n草稿" },
-      { text: "已有草稿", type: "decision", nextLabel: "是", failLabel: "否", fail: "新增草稿\n记录" },
-      { text: "更新草稿\n内容语言" },
-      { text: "返回草稿\n同步时间" },
+        { text: "查询已有\n编辑内容" },
+        { text: "已有内容", type: "decision", nextLabel: "是", failLabel: "否", fail: "新增编辑\n内容记录" },
+        { text: "更新内容\n和语言" },
+        { text: "返回同步\n时间" },
       { text: "保存序号\n最新", type: "decision", nextLabel: "是", failLabel: "否", fail: "忽略旧结果\n等待新保存" },
       { text: "显示已\n同步" },
       { text: "结束", type: "terminal" },
@@ -860,7 +903,7 @@ const flowDefinitions = {
       { text: "保存题目\n基础信息" },
       { text: "同步标签\n绑定关系" },
       { text: "替换测试\n用例集合" },
-      { text: "需要发布\n或归档", type: "decision", nextLabel: "是", failLabel: "否", fail: "停留草稿\n刷新列表" },
+        { text: "需要发布\n或归档", type: "decision", nextLabel: "是", failLabel: "否", fail: "停留当前\n刷新列表" },
       { text: "检查判题\n环境" },
       { text: "环境正常", type: "decision", nextLabel: "是", failLabel: "否", fail: "提示环境\n异常" },
       { text: "更新题目\n发布状态" },
@@ -1102,9 +1145,9 @@ const flowDefinitions = {
       { text: "查询标签\n用户进度" },
       { text: "查询公开\n样例用例" },
       { text: "加载语言\n模板" },
-      { text: "用户已登录", type: "decision", nextLabel: "是", failLabel: "否", fail: "跳过草稿\n读取" },
-      { text: "读取服务端\n草稿" },
-      { text: "草稿存在", type: "decision", nextLabel: "存在", failLabel: "无", fail: "使用默认\n模板" },
+      { text: "用户已登录", type: "decision", nextLabel: "是", failLabel: "否", fail: "跳过编辑\n内容读取" },
+      { text: "读取服务端\n编辑内容" },
+      { text: "内容存在", type: "decision", nextLabel: "存在", failLabel: "无", fail: "使用默认\n模板" },
       { text: "初始化\n编辑器" },
       { text: "渲染题面\n和用例" },
       { text: "结束", type: "terminal" },
@@ -1129,12 +1172,12 @@ const flowDefinitions = {
       { text: "开始", type: "terminal" },
       { text: "选择编程\n语言" },
       { text: "用户已登录", type: "decision", nextLabel: "是", failLabel: "否", fail: "使用本地\n模板" },
-      { text: "请求当前\n语言草稿" },
+      { text: "请求当前\n语言编辑内容" },
       { text: "后端校验\n用户" },
       { text: "查询题目\n编号", type: "decision", nextLabel: "存在", failLabel: "无", fail: "返回题目\n不存在" },
-      { text: "查询用户\n草稿记录" },
-      { text: "草稿存在", type: "decision", nextLabel: "存在", failLabel: "无", fail: "返回空草稿\n使用模板" },
-      { text: "返回草稿\n源码" },
+      { text: "查询用户\n编辑内容" },
+      { text: "内容存在", type: "decision", nextLabel: "存在", failLabel: "无", fail: "返回空内容\n使用模板" },
+      { text: "返回保存\n源码" },
       { text: "填充代码\n编辑器" },
       { text: "更新同步\n状态" },
       { text: "结束", type: "terminal" },
@@ -1413,9 +1456,9 @@ const flowDefinitions = {
       { text: "开始", type: "terminal" },
       { text: "点击新建\n题目" },
       { text: "生成默认\n题目内容" },
-      { text: "提交创建\n草稿请求" },
+      { text: "提交创建\n题目请求" },
       { text: "管理员权限\n校验", type: "decision", nextLabel: "通过", failLabel: "失败", fail: "返回403\n禁止访问" },
-      { text: "写入题目\n草稿" },
+      { text: "写入题目\n记录" },
       { text: "初始化提交\n通过次数" },
       { text: "返回题目\nID" },
       { text: "返回ID有效", type: "decision", nextLabel: "有效", failLabel: "无效", fail: "提示创建\n异常" },

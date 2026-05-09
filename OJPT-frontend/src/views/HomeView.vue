@@ -8,7 +8,7 @@ const { isAuthed } = useAuth()
 const showLogin = ref(false)
 
 const primaryAction = computed(() => (isAuthed.value ? '继续练习' : '进入题库'))
-const secondaryAction = computed(() => (isAuthed.value ? '查看提交记录' : '登录同步草稿'))
+const secondaryAction = computed(() => (isAuthed.value ? '查看提交记录' : '登录同步编辑内容'))
 
 const openLogin = () => {
   showLogin.value = true
@@ -16,7 +16,7 @@ const openLogin = () => {
 
 const overviewItems = [
   { label: '真实判题', value: '逐用例' },
-  { label: '草稿自动同步', value: '在线保存' },
+  { label: '编辑内容同步', value: '在线保存' },
   { label: '提交排名', value: 'AC 后展示' },
   { label: '耗时分布', value: '区间统计' },
 ]
@@ -33,7 +33,7 @@ const features = [
     text: '逐用例运行，失败即停，保留编译、运行和答案错误详情。',
   },
   {
-    title: '代码草稿同步',
+    title: '代码编辑内容同步',
     text: '作答页自动保存，Ctrl/Cmd+S 可手动保存当前代码。',
   },
   {
@@ -50,7 +50,7 @@ const features = [
         <div class="hero-label">OJPT 训练</div>
         <h1>OJPT 训练工作台</h1>
         <p class="hero-subtitle">
-          从题库进入作答，保存草稿，提交后查看排名和耗时分布。
+          从题库进入作答，保存编辑内容，提交后查看排名和耗时分布。
         </p>
 
         <div class="hero-actions">
@@ -82,7 +82,7 @@ const features = [
         <div class="overview-card__header">
           <div>
             <h2>训练概览</h2>
-            <p>提交、草稿和结果反馈都在作答流里完成。</p>
+            <p>提交、编辑内容和结果反馈都在作答流里完成。</p>
           </div>
           <RouterLink to="/problemset" class="overview-card__link">题库</RouterLink>
         </div>

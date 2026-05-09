@@ -620,7 +620,7 @@ const SUBMISSION_POLL_MAX_ATTEMPTS = 60
 const draftSyncText = computed(() => {
   const map = {
     idle: '未同步',
-    loading: '读取草稿',
+    loading: '读取编辑内容',
     saving: '同步中',
     saved: '已同步',
     error: '同步失败',
@@ -906,7 +906,7 @@ watch(
 
     try {
       await ElMessageBox.confirm(
-        '切换语言将加载该语言的模板或服务器草稿。确认切换吗？',
+        '切换语言将加载该语言的模板或服务器编辑内容。确认切换吗？',
         '切换语言',
         {
           confirmButtonText: '切换',
@@ -1074,7 +1074,7 @@ const shortcutTipsStorageKey = 'OJPT.solve.shortcutTipsHidden'
 const shortcutTipsVisible = ref(false)
 const shortcutTipsDontShowAgain = ref(false)
 const shortcutTipItems = [
-  { keys: 'Ctrl/Cmd + S', action: '立即保存草稿' },
+  { keys: 'Ctrl/Cmd + S', action: '立即保存编辑内容' },
   { keys: 'Tab / Shift + Tab', action: '增加或减少缩进' },
   { keys: 'Ctrl/Cmd + Z', action: '撤销编辑' },
   { keys: 'Ctrl/Cmd + R / Y / Shift + Z', action: '重做编辑' },

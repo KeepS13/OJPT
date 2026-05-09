@@ -3,7 +3,8 @@ const path = require('path')
 
 const BASE_URL = process.env.OJPT_FRONTEND_URL || 'http://127.0.0.1:8110'
 const OUT_DIR = __dirname
-const TEMP_PROBLEM_TITLE = `文档截图临时草稿题 ${new Date().toISOString().slice(0, 10)}`
+const TEMP_PROBLEM_TITLE = `文档截图临时题目 ${new Date().toISOString().slice(0, 10)}`
+const executablePath = process.env.PLAYWRIGHT_EXECUTABLE_PATH || 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'
 
 const shot = (name) => path.join(OUT_DIR, name)
 
@@ -35,7 +36,7 @@ async function firstVisible(locator) {
 }
 
 async function main() {
-  const browser = await chromium.launch({ headless: true })
+const browser = await chromium.launch({ headless: true, executablePath })
   const page = await browser.newPage({
     viewport: { width: 1440, height: 1000 },
     deviceScaleFactor: 1,
