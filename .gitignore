@@ -1,9 +1,12 @@
 ### General
 .DS_Store
 Thumbs.db
+~$*
 *.log
 *.err
 logs/
+tmp/
+outputs/
 *.tmp
 *.swp
 *.swo
@@ -12,6 +15,7 @@ logs/
 ### Node / Frontend
 node_modules/
 dist/
+OJPT-frontend/dist-paper-check/
 dist-ssr/
 coverage/
 *.local
