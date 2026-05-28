@@ -43,9 +43,12 @@
       dominant-baseline: middle;
       text-anchor: middle;
     }
-    .small { font-size: 12px; }
-    .tiny { font-size: 11px; }
+    .small { font-size: 13px; }
+    .tiny { font-size: 12px; }
     .bold { font-weight: 700; }
+    .er-entity { font-size: 18px; }
+    .er-relation { font-size: 15px; }
+    .er-card { font-size: 16px; }
   </style>
 </head>
 <body>
@@ -152,59 +155,96 @@ function verticalFeatureBox(x, y, w, h, text, textCls = "txt tiny") {
 
 function functionModules() {
   let s = "";
-  const modules = [
-    { title: "认证与账号", features: ["用户登录", "用户注册", "会话恢复", "密码重置"] },
-    { title: "题库浏览", features: ["题目检索", "条件筛选", "分页查看", "详情入口"] },
-    { title: "在线做题", features: ["题面阅读", "代码编辑", "内容保存", "样例运行"] },
-    { title: "提交判题", features: ["正式提交", "异步判题", "结果轮询", "进度更新"] },
-    { title: "训练数据", features: ["训练看板", "提交记录", "个人资料", "账号安全"] },
-    { title: "用户管理", features: ["用户列表", "详情查看", "状态修改", "重置审批"] },
-    { title: "题目管理", features: ["题目新增", "题面编辑", "用例维护", "标签绑定"] },
-    { title: "平台监控", features: ["统计概览", "状态分布", "镜像检查", "健康检测"] },
+  const roles = [
+    {
+      title: "管理员端",
+      centerX: 245,
+      moduleCenters: [100, 245, 390],
+      modules: [
+        { title: "用户管理", features: ["用户列表", "详情查看", "资料修改", "重置审批"] },
+        { title: "题目管理", features: ["题目新增", "题面编辑", "用例维护", "标签绑定"] },
+        { title: "平台监控", features: ["统计概览", "状态分布", "镜像检查", "健康检测"] },
+      ],
+    },
+    {
+      title: "用户端",
+      centerX: 850,
+      moduleCenters: [560, 705, 850, 995, 1140],
+      modules: [
+        { title: "认证与账号", features: ["用户登录", "用户注册", "会话恢复", "密码重置"] },
+        { title: "题库浏览", features: ["题目检索", "条件筛选", "分页展示", "详情入口"] },
+        { title: "在线做题", features: ["题面阅读", "代码编辑", "草稿保存", "样例运行"] },
+        { title: "提交判题", features: ["正式提交", "异步判题", "结果查询", "进度更新"] },
+        { title: "训练数据", features: ["训练看板", "提交记录", "个人资料", "账号安全"] },
+      ],
+    },
   ];
 
-  const svgW = 1060;
-  const svgH = 340;
-  const rootW = 250;
-  const rootH = 42;
-  const moduleW = 92;
-  const moduleH = 34;
-  const opW = 24;
-  const opH = 116;
-  const opGap = 4;
-  const groupGap = 12;
-  const marginX = 50;
-  const rootY = 18;
-  const moduleY = 86;
-  const branchY = 148;
-  const opY = 174;
-  const groupW = opW * 4 + opGap * 3;
-
+  const svgW = 1240;
+  const svgH = 535;
+  const rootW = 390;
+  const rootH = 56;
+  const roleW = 172;
+  const roleH = 56;
+  const moduleW = 138;
+  const moduleH = 46;
+  const featureW = 34;
+  const featureH = 172;
+  const rootY = 8;
   const rootX = (svgW - rootW) / 2;
   const rootCenterX = rootX + rootW / 2;
-  const topLineY = 64;
-  const firstCenterX = marginX + groupW / 2;
-  const lastCenterX = marginX + (modules.length - 1) * (groupW + groupGap) + groupW / 2;
+  const topLineY = 88;
+  const roleY = 108;
+  const moduleBranchY = 202;
+  const moduleY = 225;
+  const featureBranchY = 300;
+  const featureY = 328;
+  const featureOffsets = [-51, -17, 17, 51];
+  const font = 'font-family="SimSun, Songti SC, Noto Sans SC, sans-serif"';
 
-  s += box(rootX, rootY, rootW, rootH, "OJPT 在线编程训练平台", "box", "txt small bold");
-  s += line(rootCenterX, rootY + rootH, rootCenterX, topLineY);
-  s += line(firstCenterX, topLineY, lastCenterX, topLineY);
+  function localLine(x1, y1, x2, y2, strokeWidth = 3) {
+    return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#111111" stroke-width="${strokeWidth}" stroke-linecap="square"></line>`;
+  }
 
-  modules.forEach((module, i) => {
-    const groupX = marginX + i * (groupW + groupGap);
-    const centerX = groupX + groupW / 2;
-    const moduleX = groupX + (groupW - moduleW) / 2;
-    const firstOpCenterX = groupX + opW / 2;
-    const lastOpCenterX = groupX + groupW - opW / 2;
-    s += line(centerX, topLineY, centerX, moduleY);
-    s += box(moduleX, moduleY, moduleW, moduleH, module.title, "box", "txt small");
-    s += line(centerX, moduleY + moduleH, centerX, branchY);
-    s += line(firstOpCenterX, branchY, lastOpCenterX, branchY);
-    module.features.forEach((feature, j) => {
-      const opX = groupX + j * (opW + opGap);
-      const opCenterX = opX + opW / 2;
-      s += line(opCenterX, branchY, opCenterX, opY);
-      s += verticalFeatureBox(opX, opY, opW, opH, feature);
+  function localBox(x, y, w, h, text, fontSize, fontWeight = "normal", strokeWidth = 2) {
+    return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="white" stroke="#111111" stroke-width="${strokeWidth}"></rect>` +
+      `<text x="${x + w / 2}" y="${y + h / 2 + 1}" ${font} font-size="${fontSize}" font-weight="${fontWeight}" text-anchor="middle" dominant-baseline="central">${esc(text)}</text>`;
+  }
+
+  function localVerticalFeatureBox(x, y, text) {
+    const chars = Array.from(String(text));
+    const centerX = x + featureW / 2;
+    const startY = y + featureH / 2 - ((chars.length - 1) * 35) / 2;
+    let out = `<rect x="${x}" y="${y}" width="${featureW}" height="${featureH}" fill="white" stroke="#111111" stroke-width="2.2"></rect>`;
+    chars.forEach((ch, i) => {
+      out += `<text x="${centerX}" y="${startY + i * 35}" ${font} font-size="28" font-weight="700" text-anchor="middle" dominant-baseline="central">${esc(ch)}</text>`;
+    });
+    return out;
+  }
+
+  s += localBox(rootX, rootY, rootW, rootH, "OJPT 在线编程训练平台", 34, "700", 3.2);
+  s += localLine(rootCenterX, rootY + rootH, rootCenterX, topLineY);
+  s += localLine(roles[0].centerX, topLineY, roles[1].centerX, topLineY);
+
+  roles.forEach((role) => {
+    s += localLine(role.centerX, topLineY, role.centerX, roleY);
+    s += localBox(role.centerX - roleW / 2, roleY, roleW, roleH, role.title, 34, "700", 3.2);
+    s += localLine(role.centerX, roleY + roleH, role.centerX, moduleBranchY);
+    s += localLine(role.moduleCenters[0], moduleBranchY, role.moduleCenters[role.moduleCenters.length - 1], moduleBranchY);
+
+    role.modules.forEach((module, moduleIndex) => {
+      const centerX = role.moduleCenters[moduleIndex];
+      const moduleX = centerX - moduleW / 2;
+      s += localLine(centerX, moduleBranchY, centerX, moduleY);
+      s += localBox(moduleX, moduleY, moduleW, moduleH, module.title, 25, "700", 2.2);
+      s += localLine(centerX, moduleY + moduleH, centerX, featureBranchY, 2.2);
+      s += localLine(centerX + featureOffsets[0], featureBranchY, centerX + featureOffsets[3], featureBranchY, 2.2);
+      module.features.forEach((feature, featureIndex) => {
+        const featureCenterX = centerX + featureOffsets[featureIndex];
+        const featureX = featureCenterX - featureW / 2;
+        s += localLine(featureCenterX, featureBranchY, featureCenterX, featureY, 2.2);
+        s += localVerticalFeatureBox(featureX, featureY, feature);
+      });
     });
   });
 
@@ -444,20 +484,9 @@ function entityFigure(id) {
 
 function erOverview() {
   let links = "";
+  let cards = "";
   let nodes = "";
   const graph = {};
-  const erPrimaryKeys = {
-    draft: "编辑内容ID",
-    problem: "题目ID",
-    case: "用例ID",
-    profile: "资料ID",
-    user: "用户ID",
-    submission: "提交ID",
-    tag: "标签ID",
-    reset: "申请ID",
-    progress: "进度ID",
-    caseResult: "结果ID"
-  };
 
   function rectPort(cx, cy, w, h, tx, ty) {
     const dx = tx - cx;
@@ -473,103 +502,127 @@ function erOverview() {
     return scale ? [cx + dx / scale, cy + dy / scale] : [cx, cy];
   }
 
-  function nodePort(node, target) {
+  function port(node, target) {
     if (node.kind === "rel") return diamondPort(node.cx, node.cy, node.w, node.h, target.cx, target.cy);
     return rectPort(node.cx, node.cy, node.w, node.h, target.cx, target.cy);
   }
 
-  function attrEntity(key, cx, cy, w, h, name, attrs) {
+  function entity(key, cx, cy, w, h, name) {
     graph[key] = { kind: "entity", cx, cy, w, h };
-    const primaryKey = erPrimaryKeys[key];
-    attrs.forEach(([ax, ay, text]) => {
-      const ew = Math.max(44, text.length * 10 + 16);
-      const [sx, sy] = rectPort(cx, cy, w, h, ax, ay);
-      links += line(sx, sy, ax, ay);
-      nodes += text === primaryKey
-        ? underlinedEllipse(ax - ew / 2, ay - 12, ew, 24, text, "txt tiny", 6.2, 9.2, 18)
-        : ellipse(ax - ew / 2, ay - 12, ew, 24, text, "txt tiny");
-    });
-    nodes += box(cx - w / 2, cy - h / 2, w, h, name, "box", "txt small bold");
+    nodes += box(cx - w / 2, cy - h / 2, w, h, name, "box", "txt er-entity bold");
   }
 
-  function rel(key, cx, cy, text, w = 60, h = 36) {
+  function relation(key, cx, cy, text, w = 78, h = 46) {
     graph[key] = { kind: "rel", cx, cy, w, h };
-    nodes += diamond(cx, cy, w, h, text, "txt tiny");
+    nodes += diamond(cx, cy, w, h, text, "txt er-relation bold");
   }
 
-  function connect(aKey, bKey, card, t = 0.28, dx = 0, dy = 0) {
+  function connect(aKey, bKey) {
     const a = graph[aKey];
     const b = graph[bKey];
-    const [x1, y1] = nodePort(a, b);
-    const [x2, y2] = nodePort(b, a);
+    const [x1, y1] = port(a, b);
+    const [x2, y2] = port(b, a);
     links += line(x1, y1, x2, y2);
-    if (card) links += label(x1 + (x2 - x1) * t + dx, y1 + (y2 - y1) * t + dy, card, "txt tiny");
   }
 
-  attrEntity("draft", 300, 145, 120, 34, "代码编辑内容", [
-    [205, 72, "编辑内容ID"], [340, 62, "创建时间"], [205, 145, "语言"], [230, 230, "源代码"], [385, 225, "题目ID"]
-  ]);
-  attrEntity("problem", 610, 145, 82, 34, "题目", [
-    [520, 72, "题目ID"], [585, 52, "题号"], [650, 52, "标题"], [720, 78, "难度"], [545, 235, "题目状态"]
-  ]);
-  attrEntity("case", 880, 145, 102, 34, "测试用例", [
-    [790, 72, "用例ID"], [940, 72, "排序号"], [995, 145, "输入"], [945, 230, "期望输出"]
-  ]);
-  attrEntity("profile", 155, 365, 96, 34, "用户资料", [
-    [90, 290, "资料ID"], [48, 365, "昵称"], [96, 445, "简介"], [200, 292, "头像"]
-  ]);
-  attrEntity("user", 390, 385, 82, 34, "用户", [
-    [390, 295, "用户ID"], [300, 330, "用户名"], [385, 475, "角色"], [470, 320, "邮箱"], [470, 450, "状态"]
-  ]);
-  attrEntity("submission", 690, 385, 108, 34, "提交记录", [
-    [760, 300, "提交ID"], [610, 465, "状态"], [690, 505, "耗时"], [805, 335, "源代码"]
-  ]);
-  attrEntity("tag", 1040, 345, 76, 34, "标签", [
-    [980, 270, "标签ID"], [1122, 310, "题目ID"], [1122, 380, "名称"], [1035, 440, "类型"]
-  ]);
-  attrEntity("reset", 165, 625, 122, 34, "密码重置申请", [
-    [80, 545, "申请ID"], [55, 625, "邮箱"], [116, 710, "状态"], [235, 710, "申请时间"]
-  ]);
-  attrEntity("progress", 470, 630, 132, 34, "用户题目进度", [
-    [365, 545, "进度ID"], [335, 630, "进度状态"], [440, 725, "最近提交"], [565, 705, "更新时间"], [580, 565, "题目ID"]
-  ]);
-  attrEntity("caseResult", 945, 610, 126, 34, "提交用例结果", [
-    [1045, 570, "结果ID"], [810, 610, "用例序号"], [900, 705, "状态"], [1065, 525, "耗时"], [1070, 670, "错误输出"]
-  ]);
+  function connectRoute(aKey, bKey, via) {
+    const a = graph[aKey];
+    const b = graph[bKey];
+    const first = { cx: via[0][0], cy: via[0][1] };
+    const last = { cx: via[via.length - 1][0], cy: via[via.length - 1][1] };
+    const start = port(a, first);
+    const end = port(b, last);
+    links += poly([start, ...via, end], false);
+  }
 
-  rel("extend", 275, 365, "扩展");
-  rel("apply", 255, 505, "申请");
-  rel("save", 330, 255, "保存");
-  rel("relDraftProblem", 455, 145, "关联");
-  rel("submit", 540, 385, "提交");
-  rel("relProblemSubmission", 645, 255, "对应");
-  rel("own", 745, 145, "拥有");
-  rel("bind", 835, 285, "绑定");
-  rel("contain", 820, 500, "包含");
-  rel("train", 440, 505, "训练");
+  function card(x, y, text) {
+    cards += label(x, y, text, "txt er-card bold");
+  }
 
-  connect("profile", "extend", "1", 0.38, 0, -10);
-  connect("extend", "user", "1", 0.58, 0, -10);
-  connect("user", "apply", "1", 0.28, -8, 4);
-  connect("apply", "reset", "N", 0.55, -6, 8);
-  connect("draft", "save", "N", 0.28, 8, 0);
-  connect("save", "user", "1", 0.58, 8, 0);
-  connect("draft", "relDraftProblem", "N", 0.28, 0, -10);
-  connect("relDraftProblem", "problem", "1", 0.58, 0, -10);
-  connect("user", "submit", "1", 0.28, 0, -10);
-  connect("submit", "submission", "N", 0.58, 0, -10);
-  connect("problem", "relProblemSubmission", "1", 0.28, 8, -2);
-  connect("relProblemSubmission", "submission", "N", 0.58, 8, 0);
-  connect("problem", "own", "1", 0.28, 0, -10);
-  connect("own", "case", "N", 0.58, 0, -10);
-  connect("problem", "bind", "M", 0.25, 8, 2);
-  connect("bind", "tag", "N", 0.58, 0, -10);
-  connect("submission", "contain", "1", 0.28, 8, 0);
-  connect("contain", "caseResult", "N", 0.58, 8, 0);
-  connect("user", "train", "1", 0.3, -8, 0);
-  connect("train", "progress", "N", 0.55, 8, 0);
+  function cardNear(entityKey, relationKey, text, perp = 0, along = 16) {
+    const entityNode = graph[entityKey];
+    const relationNode = graph[relationKey];
+    const [px, py] = port(entityNode, relationNode);
+    const dx = relationNode.cx - entityNode.cx;
+    const dy = relationNode.cy - entityNode.cy;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len;
+    const uy = dy / len;
+    const nx = -uy;
+    const ny = ux;
+    card(px + ux * along + nx * perp, py + uy * along + ny * perp, text);
+  }
 
-  return svg(1160, 750, links + nodes);
+  entity("profile", 130, 90, 150, 56, "用户资料");
+  entity("user", 130, 320, 140, 56, "用户");
+  entity("reset", 130, 590, 170, 56, "密码重置申请");
+  entity("draft", 410, 120, 170, 56, "代码编辑内容");
+  entity("submission", 410, 320, 160, 56, "提交记录");
+  entity("caseResult", 410, 590, 190, 56, "提交用例结果");
+  entity("problem", 700, 320, 140, 56, "题目");
+  entity("progress", 650, 590, 190, 56, "用户题目进度");
+  entity("case", 980, 120, 160, 56, "测试用例");
+  entity("tag", 980, 320, 140, 56, "标签");
+
+  relation("extend", 130, 205, "扩展");
+  relation("apply", 130, 455, "申请");
+  relation("save", 270, 220, "保存");
+  relation("relDraftProblem", 555, 220, "关联");
+  relation("submit", 270, 320, "提交");
+  relation("relProblemSubmission", 555, 320, "对应");
+  relation("contain", 410, 455, "包含");
+  relation("record", 700, 455, "记录");
+  relation("train", 300, 515, "训练");
+  relation("own", 840, 220, "拥有");
+  relation("bind", 840, 320, "绑定");
+
+  connect("profile", "extend");
+  connect("extend", "user");
+  connect("user", "apply");
+  connect("apply", "reset");
+  connect("user", "save");
+  connect("save", "draft");
+  connect("draft", "relDraftProblem");
+  connect("relDraftProblem", "problem");
+  connect("user", "submit");
+  connect("submit", "submission");
+  connect("submission", "relProblemSubmission");
+  connect("relProblemSubmission", "problem");
+  connect("user", "train");
+  connectRoute("train", "progress", [[300, 650], [555, 650]]);
+  connect("problem", "own");
+  connect("own", "case");
+  connect("problem", "bind");
+  connect("bind", "tag");
+  connect("submission", "contain");
+  connect("contain", "caseResult");
+  connect("problem", "record");
+  connect("record", "progress");
+
+  cardNear("profile", "extend", "1", -18);
+  card(112, 286, "1");
+  card(112, 372, "1");
+  cardNear("reset", "apply", "N", 18);
+  card(214, 305, "1");
+  cardNear("submission", "submit", "N", 18);
+  cardNear("submission", "relProblemSubmission", "N", -18);
+  cardNear("problem", "relProblemSubmission", "1", 18);
+  card(208, 282, "1");
+  cardNear("draft", "save", "N", -24);
+  cardNear("draft", "relDraftProblem", "N", 24);
+  cardNear("problem", "relDraftProblem", "1", 18);
+  cardNear("submission", "contain", "1", -18);
+  cardNear("caseResult", "contain", "N", 18);
+  cardNear("problem", "record", "1", -18);
+  cardNear("progress", "record", "N", 18);
+  card(210, 386, "1");
+  cardNear("progress", "train", "N", 18);
+  cardNear("problem", "own", "1", -16);
+  cardNear("case", "own", "N", -24);
+  cardNear("problem", "bind", "M", -18);
+  cardNear("tag", "bind", "N", 18);
+
+  return svg(1090, 690, links + nodes + cards);
 }
 
 function legacyFlowFigure(kind) {
@@ -1610,6 +1663,193 @@ const flowDefinitions = {
   },
 };
 
+Object.assign(flowDefinitions, {
+  "fig-5-1-login-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { id: "open", text: "打开登录\n弹窗" },
+      { id: "input", text: "输入账号\n和密码" },
+      { text: "表单校验", type: "decision", nextLabel: "通过", failLabel: "失败", fail: "提示重新\n填写", failTo: "input" },
+      { text: "提交登录\n请求" },
+      { text: "账号存在", type: "decision", nextLabel: "是", failLabel: "否", fail: "提示账号\n不存在", failTo: "input" },
+      { text: "密码正确", type: "decision", nextLabel: "是", failLabel: "否", fail: "提示密码\n错误", failTo: "input" },
+      { text: "状态正常", type: "decision", nextLabel: "是", failLabel: "否", fail: "提示账号\n异常", failTo: "input" },
+      { text: "生成Token\n返回信息" },
+      { text: "前端保存\n登录态" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-7-register-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "打开注册\n页签" },
+      { id: "input", text: "输入账号\n密码昵称" },
+      { text: "表单校验", type: "decision", nextLabel: "通过", failLabel: "失败", fail: "提示重新\n填写", failTo: "input" },
+      { text: "提交注册\n请求" },
+      { text: "账号格式\n正确", type: "decision", nextLabel: "是", failLabel: "否", fail: "提示格式\n错误", failTo: "input" },
+      { text: "账号未占用", type: "decision", nextLabel: "是", failLabel: "否", fail: "提示已\n被占用", failTo: "input" },
+      { text: "创建用户\n基础资料" },
+      { text: "绑定普通\n用户角色" },
+      { text: "生成Token\n返回信息" },
+      { text: "前端保存\n登录态" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-2-problem-filter-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "进入题库\n列表页" },
+      { id: "filter", text: "输入筛选\n条件" },
+      { text: "请求题库\n列表" },
+      { text: "参数合法", type: "decision", nextLabel: "是", failLabel: "否", fail: "提示参数\n错误", failTo: "filter" },
+      { text: "查询已发布\n题目" },
+      { text: "加载状态\n和标签" },
+      { text: "存在结果", type: "decision", nextLabel: "是", failLabel: "否", fail: "显示空\n列表", failTo: "end" },
+      { text: "渲染题目\n列表" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-20-problem-detail-init-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "进入做题\n页面" },
+      { text: "读取题号\n参数" },
+      { text: "题号合法", type: "decision", nextLabel: "是", failLabel: "否", fail: "显示参数\n错误", failTo: "end" },
+      { text: "加载题目\n样例模板" },
+      { text: "题目存在", type: "decision", nextLabel: "是", failLabel: "否", fail: "显示题目\n不存在", failTo: "end" },
+      { text: "用户已登录", type: "decision", nextLabel: "是", failLabel: "否", fail: "使用默认\n模板", failTo: "init" },
+      { text: "读取代码\n草稿" },
+      { id: "init", text: "初始化\n编辑器" },
+      { text: "渲染题面\n和用例" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-3-code-draft-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { id: "edit", text: "用户编辑\n源码" },
+      { text: "防抖触发\n保存" },
+      { text: "满足保存\n条件", type: "decision", nextLabel: "是", failLabel: "否", fail: "保持本地\n内容", failTo: "end" },
+      { text: "用户已登录", type: "decision", nextLabel: "是", failLabel: "否", fail: "提示登录后\n同步", failTo: "edit" },
+      { text: "提交草稿\n保存请求" },
+      { text: "题目存在", type: "decision", nextLabel: "是", failLabel: "否", fail: "提示保存\n失败", failTo: "end" },
+      { text: "新增或更新\n草稿" },
+      { text: "返回同步\n时间" },
+      { text: "显示已\n同步" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-4-code-run-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { id: "code", text: "点击运行\n按钮" },
+      { text: "登录和输入\n合法", type: "decision", nextLabel: "是", failLabel: "否", fail: "提示补全\n信息", failTo: "code" },
+      { text: "收集测试\n用例" },
+      { text: "存在用例", type: "decision", nextLabel: "是", failLabel: "否", fail: "提示添加\n用例", failTo: "code" },
+      { text: "请求代码\n运行接口" },
+      { text: "Docker编译\n运行代码" },
+      { text: "执行成功", type: "decision", nextLabel: "是", failLabel: "否", fail: "生成错误\n结果", failTo: "show" },
+      { text: "比较实际\n输出" },
+      { text: "输出正确", type: "decision", nextLabel: "是", failLabel: "否", fail: "生成WA\n结果", failTo: "show" },
+      { id: "show", text: "展示运行\n明细" },
+      { text: "结束", type: "terminal" },
+    ],
+    rowGap: 82,
+  },
+  "fig-5-5-submit-async-judge-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { id: "submit", text: "点击正式\n提交" },
+      { text: "提交信息\n合法", type: "decision", nextLabel: "是", failLabel: "否", fail: "提示补全\n信息", failTo: "submit" },
+      { text: "创建提交\n记录" },
+      { text: "投递判题\n任务" },
+      { text: "执行测试\n用例" },
+      { text: "保存用例\n结果" },
+      { text: "汇总最终\n状态" },
+      { text: "最终AC", type: "decision", nextLabel: "是", failLabel: "否", fail: "保持尝试\n状态", failTo: "show" },
+      { text: "更新通过\n进度" },
+      { id: "show", text: "展示判题\n结果" },
+      { text: "结束", type: "terminal" },
+    ],
+    rowGap: 82,
+  },
+  "fig-5-23-submission-poll-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "获得提交\n编号" },
+      { text: "显示排队\n或判题中" },
+      { id: "poll", text: "请求提交\n结果" },
+      { text: "权限校验\n通过", type: "decision", nextLabel: "是", failLabel: "否", fail: "提示无权\n或不存在", failTo: "end" },
+      { text: "返回状态\n和明细" },
+      { text: "是否终态", type: "decision", nextLabel: "是", failLabel: "否", fail: "等待下次\n轮询", failTo: "poll" },
+      { text: "刷新题目\n详情" },
+      { text: "显示最终\n结果" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-19-training-dashboard-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "进入训练\n看板页" },
+      { text: "请求训练\n统计" },
+      { text: "已登录", type: "decision", nextLabel: "是", failLabel: "否", fail: "提示未\n登录", failTo: "end" },
+      { text: "统计提交\n和通过" },
+      { text: "统计难度\n分布" },
+      { text: "查询最近\n提交" },
+      { text: "存在数据", type: "decision", nextLabel: "是", failLabel: "否", fail: "展示空\n看板", failTo: "end" },
+      { text: "渲染指标\n图表列表" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-6-admin-problem-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "进入题目\n管理页" },
+      { text: "管理员权限\n校验", type: "decision", nextLabel: "通过", failLabel: "失败", fail: "提示无权\n访问", failTo: "end" },
+      { text: "查询题目\n列表" },
+      { id: "edit", text: "新建或编辑\n题目" },
+      { text: "维护题面\n用例标签" },
+      { text: "用例完整", type: "decision", nextLabel: "是", failLabel: "否", fail: "提示补全\n用例", failTo: "edit" },
+      { text: "保存题目\n信息" },
+      { text: "同步标签\n和用例" },
+      { text: "需要发布", type: "decision", nextLabel: "是", failLabel: "否", fail: "刷新管理\n列表", failTo: "end" },
+      { text: "检查判题\n环境" },
+      { text: "环境正常", type: "decision", nextLabel: "是", failLabel: "否", fail: "提示环境\n异常", failTo: "edit" },
+      { text: "更新发布\n状态" },
+      { text: "刷新管理\n列表" },
+      { text: "结束", type: "terminal" },
+    ],
+    rowGap: 80,
+  },
+  "fig-5-32-admin-user-list-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "打开用户\n管理页" },
+      { id: "filter", text: "输入筛选\n条件" },
+      { text: "管理员权限\n校验", type: "decision", nextLabel: "通过", failLabel: "失败", fail: "提示无权\n访问", failTo: "end" },
+      { text: "查询用户\n分页数据" },
+      { text: "返回分页\n结果" },
+      { text: "存在用户", type: "decision", nextLabel: "有", failLabel: "无", fail: "展示空\n列表", failTo: "end" },
+      { text: "渲染用户\n表格" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+  "fig-5-31-admin-judge-health-flow": {
+    nodes: [
+      { text: "开始", type: "terminal" },
+      { text: "请求环境\n健康检查" },
+      { text: "管理员权限\n校验", type: "decision", nextLabel: "通过", failLabel: "失败", fail: "提示无权\n访问", failTo: "end" },
+      { text: "检查Docker\n可执行文件" },
+      { text: "Docker可用", type: "decision", nextLabel: "是", failLabel: "否", fail: "标记环境\n异常", failTo: "summary" },
+      { text: "检查语言\n运行镜像" },
+      { text: "命令成功", type: "decision", nextLabel: "是", failLabel: "否", fail: "记录异常\n信息", failTo: "summary" },
+      { id: "summary", text: "汇总环境\n状态" },
+      { text: "返回检测\n结果" },
+      { text: "结束", type: "terminal" },
+    ],
+  },
+});
+
 function flowFigure(kind) {
   const config = flowDefinitions[kind];
   if (!config) {
@@ -1622,9 +1862,9 @@ function flowFigure(kind) {
   const cx = config.cx || 250;
   const branchX = config.branchX || 455;
   const branchW = config.branchW || 150;
-  const branchEndX = branchX + branchW + 26;
-  const branchEndW = config.branchEndW || 76;
-  const w = branchEndX + branchEndW + 34;
+  const branchRailX = config.branchRailX || branchX + branchW + 34;
+  const hasBranches = nodes.some((node) => node.fail);
+  const w = hasBranches ? branchRailX + 48 : cx + 120;
   const h = top + (nodes.length - 1) * rowGap + 58;
   let connectors = "";
   let shapes = "";
@@ -1637,11 +1877,11 @@ function flowFigure(kind) {
     const processH = node.h || 44;
     if (isTerminal) {
       const tw = node.w || 92;
-      const th = node.h || 34;
+      const th = node.h || 36;
       return { ...node, isTerminal, isDecision, cx, cy, left: cx - tw / 2, right: cx + tw / 2, top: cy - th / 2, bottom: cy + th / 2, w: tw, h: th };
     }
     if (isDecision) {
-      const dw = node.w || 122;
+      const dw = node.w || 132;
       const dh = node.h || 62;
       return { ...node, isTerminal, isDecision, cx, cy, left: cx - dw / 2, right: cx + dw / 2, top: cy - dh / 2, bottom: cy + dh / 2, w: dw, h: dh };
     }
@@ -1650,25 +1890,36 @@ function flowFigure(kind) {
 
   const layout = nodes.map((node, i) => nodeInfo(node, i));
   layout.forEach((node) => {
-    if (node.isTerminal) shapes += roundBox(node.left, node.top, node.w, node.h, node.text, "txt small");
-    else if (node.isDecision) shapes += diamond(node.cx, node.cy, node.w, node.h, node.text, "txt tiny");
-    else shapes += box(node.left, node.top, node.w, node.h, node.text, "box", "txt small");
+    if (node.isTerminal) shapes += roundBox(node.left, node.top, node.w, node.h, node.text, "txt");
+    else if (node.isDecision) shapes += diamond(node.cx, node.cy, node.w, node.h, node.text, "txt small");
+    else shapes += box(node.left, node.top, node.w, node.h, node.text, "box", "txt");
   });
 
   for (let i = 0; i < layout.length - 1; i++) {
     const cur = layout[i];
     const next = layout[i + 1];
     connectors += line(cur.cx, cur.bottom, next.cx, next.top, true);
-    if (cur.nextLabel) connectors += label(cur.cx + 34, (cur.bottom + next.top) / 2, cur.nextLabel, "txt tiny");
+    if (cur.nextLabel) connectors += label(cur.cx + 38, (cur.bottom + next.top) / 2, cur.nextLabel, "txt small");
+  }
+
+  const endNode = layout[layout.length - 1];
+  function branchTarget(node) {
+    if (!node.failTo || node.failTo === "end") return endNode;
+    return layout.find((item) => item.id === node.failTo) || endNode;
   }
 
   layout.filter((node) => node.fail).forEach((node) => {
     const branchY = node.cy;
+    const target = branchTarget(node);
     connectors += line(node.right, branchY, branchX, branchY, true);
-    connectors += label((node.right + branchX) / 2, branchY - 16, node.failLabel || "否", "txt tiny");
+    connectors += label((node.right + branchX) / 2, branchY - 16, node.failLabel || "否", "txt small");
     shapes += box(branchX, branchY - 22, branchW, 44, node.fail, "box", "txt small");
-    connectors += line(branchX + branchW, branchY, branchEndX, branchY, true);
-    shapes += roundBox(branchEndX, branchY - 17, branchEndW, 34, "结束", "txt small");
+    connectors += poly([
+      [branchX + branchW, branchY],
+      [branchRailX, branchY],
+      [branchRailX, target.cy],
+      [target.right, target.cy],
+    ], true);
   });
 
   return svg(w, h, shapes + connectors);
